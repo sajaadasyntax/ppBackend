@@ -1,0 +1,38 @@
+{
+  "name": "ppbackend",
+  "version": "1.0.0",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "migrate": "prisma migrate dev",
+    "generate": "prisma generate",
+    "seed": "node prisma/seed.js",
+    "setup": "node src/dev-setup.js",
+    "studio": "prisma studio",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "axios": "^1.11.0",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "pg": "^8.15.6",
+    "prisma": "^5.0.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "description": "Backend API for managing mobile app and admin panel",
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  }
+}

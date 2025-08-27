@@ -1,0 +1,423 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://neondb_owner:npg_lpyokA50ugQh@ep-curly-sky-abhecrb1-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+}
+
+// Administrative level enum for user roles hierarchy
+// Note: PostgreSQL supports enums, we don't need to use strings like before
+enum AdminLevel {
+  GENERAL_SECRETARIAT
+  REGION
+  LOCALITY
+  ADMIN_UNIT
+  DISTRICT
+  USER
+  ADMIN
+}
+
+// Region model represents الولاية level
+model Region {
+  id          String      @id @default(uuid())
+  name        String
+  code        String?     @unique
+  description String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relationships
+  users       User[]      // Users directly associated with this region
+  localities  Locality[]  // Localities in this region
+  
+  // Admin relationship
+  adminId     String?
+  admin       User?       @relation("RegionAdmin", fields: [adminId], references: [id])
+  
+  // Content targeting this region
+  bulletins     Bulletin[]     // Bulletins targeted to this region
+  surveys       Survey[]       // Surveys targeted to this region
+  votingItems   VotingItem[]   // Voting items targeted to this region
+  reports       Report[]       // Reports targeted to this region
+}
+
+// Locality model represents المحلية level
+model Locality {
+  id          String      @id @default(uuid())
+  name        String
+  code        String?     @unique
+  description String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Parent region
+  regionId    String
+  region      Region      @relation(fields: [regionId], references: [id])
+  
+  // Relationships
+  users       User[]      // Users directly associated with this locality
+  adminUnits  AdminUnit[] // Administrative units in this locality
+  
+  // Admin relationship
+  adminId     String?
+  admin       User?       @relation("LocalityAdmin", fields: [adminId], references: [id])
+  
+  // Content targeting this locality
+  bulletins     Bulletin[]     // Bulletins targeted to this locality
+  surveys       Survey[]       // Surveys targeted to this locality
+  votingItems   VotingItem[]   // Voting items targeted to this locality
+  reports       Report[]       // Reports targeted to this locality
+}
+
+// AdminUnit model represents الوحدة الادارية level
+model AdminUnit {
+  id          String      @id @default(uuid())
+  name        String
+  code        String?     @unique
+  description String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Parent locality
+  localityId  String
+  locality    Locality    @relation(fields: [localityId], references: [id])
+  
+  // Relationships
+  users       User[]      // Users directly associated with this admin unit
+  districts   District[]  // Districts in this admin unit
+  
+  // Admin relationship
+  adminId     String?
+  admin       User?       @relation("AdminUnitAdmin", fields: [adminId], references: [id])
+  
+  // Content targeting this admin unit
+  bulletins     Bulletin[]     // Bulletins targeted to this admin unit
+  surveys       Survey[]       // Surveys targeted to this admin unit
+  votingItems   VotingItem[]   // Voting items targeted to this admin unit
+  reports       Report[]       // Reports targeted to this admin unit
+}
+
+// District model represents الحي level
+model District {
+  id          String      @id @default(uuid())
+  name        String
+  code        String?     @unique
+  description String?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Parent administrative unit
+  adminUnitId String
+  adminUnit   AdminUnit   @relation(fields: [adminUnitId], references: [id])
+  
+  // Relationships
+  users       User[]      // Users directly associated with this district
+  
+  // Admin relationship
+  adminId     String?
+  admin       User?       @relation("DistrictAdmin", fields: [adminId], references: [id])
+  
+  // Content targeting this district
+  bulletins     Bulletin[]     // Bulletins targeted to this district
+  surveys       Survey[]       // Surveys targeted to this district
+  votingItems   VotingItem[]   // Voting items targeted to this district
+  reports       Report[]       // Reports targeted to this district
+}
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  password       String
+  role           String         @default("USER") // For backward compatibility
+  adminLevel     AdminLevel     @default(USER)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  profile        Profile?
+  memberDetails  MemberDetails?
+  refreshTokens  RefreshToken[]
+  surveys        SurveyResponse[]
+  votes          Vote[]
+  reports        Report[]
+  votingItems    VotingItem[]   // Created voting items
+  subscriptions  Subscription[]
+  
+  // Administrative hierarchy references
+  regionId       String?        // الولاية
+  region         Region?        @relation(fields: [regionId], references: [id])
+  localityId     String?        // المحلية
+  locality       Locality?      @relation(fields: [localityId], references: [id])
+  adminUnitId    String?        // الوحدة الادارية
+  adminUnit      AdminUnit?     @relation(fields: [adminUnitId], references: [id])
+  districtId     String?        // الحي
+  district       District?      @relation(fields: [districtId], references: [id])
+  
+  // Users managed by this admin (if this user is an admin at any level)
+  managedRegions      Region[]       @relation("RegionAdmin")
+  managedLocalities   Locality[]     @relation("LocalityAdmin")
+  managedAdminUnits   AdminUnit[]    @relation("AdminUnitAdmin")
+  managedDistricts    District[]     @relation("DistrictAdmin")
+}
+
+model Profile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName   String?
+  lastName    String?
+  phoneNumber String?
+  avatarUrl   String?
+  status      String    @default("active") // active or disabled
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Content {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  body        String?
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Bulletin {
+  id          String   @id @default(uuid())
+  title       String
+  content     String
+  date        DateTime
+  image       String?
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Target hierarchy - content appears for users in this hierarchy and below (REQUIRED)
+  targetRegionId     String   // REQUIRED: Every bulletin must be targeted to at least a region
+  targetRegion       Region   @relation(fields: [targetRegionId], references: [id])
+  targetLocalityId   String?  // Optional: If set, only users in this locality and its children see this
+  targetLocality     Locality? @relation(fields: [targetLocalityId], references: [id])
+  targetAdminUnitId  String?  // Optional: If set, only users in this admin unit and its children see this
+  targetAdminUnit    AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrictId   String?  // Optional: If set, only users in this district see this
+  targetDistrict     District? @relation(fields: [targetDistrictId], references: [id])
+}
+
+model ArchiveDocument {
+  id          String   @id @default(uuid())
+  title       String
+  type        String
+  category    String
+  date        DateTime
+  size        String
+  url         String
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Survey {
+  id          String          @id @default(uuid())
+  title       String
+  description String
+  dueDate     DateTime
+  questions   String          // Stored as JSON string
+  published   Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  responses   SurveyResponse[]
+  
+  // Target hierarchy - survey appears for users in this hierarchy and below (REQUIRED)
+  targetRegionId     String   // REQUIRED: Every survey must be targeted to at least a region
+  targetRegion       Region   @relation(fields: [targetRegionId], references: [id])
+  targetLocalityId   String?  // Optional: If set, only users in this locality and its children see this
+  targetLocality     Locality? @relation(fields: [targetLocalityId], references: [id])
+  targetAdminUnitId  String?  // Optional: If set, only users in this admin unit and its children see this
+  targetAdminUnit    AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrictId   String?  // Optional: If set, only users in this district see this
+  targetDistrict     District? @relation(fields: [targetDistrictId], references: [id])
+}
+
+model SurveyResponse {
+  id        String   @id @default(uuid())
+  surveyId  String
+  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers   String   // Stored as JSON string
+  submittedAt DateTime @default(now())
+
+  @@unique([surveyId, userId])
+}
+
+model VotingItem {
+  id          String    @id @default(uuid())
+  title       String
+  description String
+  startDate   DateTime
+  endDate     DateTime
+  options     String    // Stored as JSON string
+  targetLevel String    // User level (الحي, الوحدة الإدارية, etc.) - kept for backward compatibility
+  voteType    String    @default("opinion") // "electoral" or "opinion"
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  published   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  votes       Vote[]
+  
+  // Target hierarchy - voting appears for users in this hierarchy and below (REQUIRED)
+  targetRegionId     String   // REQUIRED: Every voting item must be targeted to at least a region
+  targetRegion       Region   @relation(fields: [targetRegionId], references: [id])
+  targetLocalityId   String?  // Optional: If set, only users in this locality and its children can vote
+  targetLocality     Locality? @relation(fields: [targetLocalityId], references: [id])
+  targetAdminUnitId  String?  // Optional: If set, only users in this admin unit and its children can vote
+  targetAdminUnit    AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrictId   String?  // Optional: If set, only users in this district can vote
+  targetDistrict     District? @relation(fields: [targetDistrictId], references: [id])
+}
+
+model Vote {
+  id          String     @id @default(uuid())
+  votingId    String
+  voting      VotingItem @relation(fields: [votingId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  optionId    String
+  votedAt     DateTime   @default(now())
+
+  @@unique([votingId, userId])
+}
+
+model Report {
+  id          String   @id @default(uuid())
+  title       String
+  type        String
+  description String
+  date        DateTime
+  status      String   @default("pending")
+  attachmentName String?
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Target hierarchy - report is visible to admins in this hierarchy and above (REQUIRED)
+  targetRegionId     String   // REQUIRED: Every report must be targeted to at least a region
+  targetRegion       Region   @relation(fields: [targetRegionId], references: [id])
+  targetLocalityId   String?  // Optional: If set, visible to locality admins and above
+  targetLocality     Locality? @relation(fields: [targetLocalityId], references: [id])
+  targetAdminUnitId  String?  // Optional: If set, visible to admin unit admins and above
+  targetAdminUnit    AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrictId   String?  // Optional: If set, visible to district admins and above
+  targetDistrict     District? @relation(fields: [targetDistrictId], references: [id])
+}
+
+model SubscriptionPlan {
+  id          String   @id @default(uuid())
+  title       String
+  price       String
+  currency    String
+  period      String
+  features    String   // Stored as JSON string
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id          String          @id @default(uuid())
+  planId      String
+  plan        SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate   DateTime
+  endDate     DateTime
+  status      String          @default("active")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model Settings {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MemberDetails {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Personal Information
+  fullName    String
+  nickname    String?
+  birthDate   String?
+  birthPlace  String?
+  birthLocality String?
+  birthState  String?
+  gender      String?
+  religion    String?
+  maritalStatus String?
+  nationalId  String?
+  nationalIdIssueDate String?
+  passportNumber String?
+  
+  // Residence Information
+  neighborhood String?
+  locality    String?
+  state       String?
+  phone       String?
+  mobile      String?
+  
+  // Education and Work
+  highestEducation String?
+  educationInstitution String?
+  graduationYear String?
+  currentJob   String?
+  jobSector    String?
+  employmentStatus String?
+  workAddress  String?
+  
+  // Additional Information
+  disability   String?
+  residenceAbroad String?
+  electoralDistrict String?
+  
+  // Political and Social Activity
+  previousCouncilMembership String?
+  previousPartyMembership String?
+  civilSocietyParticipation String?
+  clubMembership String?
+  professionalMembership String?
+  
+  // Timestamps
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// Role enum replaced with String for SQLite compatibility
+// Possible values: "USER", "ADMIN"
