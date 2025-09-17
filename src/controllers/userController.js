@@ -2,13 +2,14 @@ const userService = require('../services/userService');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Get all users with pagination
+// Get all users with pagination and hierarchical access control
 exports.getAllUsers = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const adminUser = req.user; // Get the admin user from authentication middleware
 
-    const result = await userService.getAllUsers(page, limit);
+    const result = await userService.getAllUsers(page, limit, adminUser);
     res.json(result);
   } catch (error) {
     console.error('Get all users error:', error);
@@ -91,7 +92,7 @@ exports.createUser = async (req, res) => {
 // Create a new member with detailed information
 exports.createMember = async (req, res) => {
   try {
-    const { personalInfo, residenceInfo, educationAndWork, additionalInfo, politicalAndSocialActivity, hierarchyInfo } = req.body;
+    const { personalInfo, residenceInfo, educationAndWork, additionalInfo, politicalAndSocialActivity, hierarchyInfo, password, publicSignup } = req.body;
     
     // Validate required fields
     const missingFields = [];
@@ -118,9 +119,15 @@ exports.createMember = async (req, res) => {
     if (existingUser) {
       return res.status(409).json({ error: 'البريد الإلكتروني مستخدم بالفعل' });
     }
+
+    // Check if user already exists with the same mobile number
+    const existingByMobile = await userService.getUserByMobileNumber(residenceInfo.mobile);
+    if (existingByMobile) {
+      return res.status(409).json({ error: 'رقم الجوال مستخدم بالفعل' });
+    }
     
-    // Generate a random password (can be changed later)
-    const tempPassword = Math.random().toString(36).slice(-8);
+    // Generate a random password (can be changed later) unless provided (public signup)
+    const tempPassword = password && password.length >= 6 ? password : Math.random().toString(36).slice(-8);
     
     // Get region and locality names from hierarchy info or from their IDs
     let regionName = hierarchyInfo.regionName;
@@ -146,6 +153,7 @@ exports.createMember = async (req, res) => {
       email: residenceInfo.email,
       password: tempPassword,
       role: 'USER', // Default role for new members
+      mobileNumber: residenceInfo.mobile,
       // Add hierarchy fields to the user
       regionId: hierarchyInfo.regionId,
       localityId: hierarchyInfo.localityId || null,
@@ -155,7 +163,8 @@ exports.createMember = async (req, res) => {
         firstName: personalInfo.fullName.split(' ')[0] || '',
         lastName: personalInfo.fullName.split(' ').slice(1).join(' ') || '',
         phoneNumber: residenceInfo.mobile,
-        status: 'active'
+        // If it's a public signup, require admin activation
+        status: publicSignup ? 'disabled' : 'active'
       },
       // Add the new memberDetails object
       memberDetails: {
@@ -301,12 +310,13 @@ exports.getCurrentUser = async (req, res) => {
 // Alias for getCurrentUser
 exports.getUserProfile = exports.getCurrentUser;
 
-// Get all memberships for admin panel
+// Get all memberships for admin panel with hierarchical access control
 exports.getMemberships = async (req, res) => {
   try {
     const { status, role } = req.query;
+    const adminUser = req.user; // Get the admin user from authentication middleware
     
-    const memberships = await userService.getMemberships(status, role);
+    const memberships = await userService.getMemberships(status, role, adminUser);
     res.json(memberships);
   } catch (error) {
     console.error('Get memberships error:', error);
@@ -522,36 +532,40 @@ exports.createUserWithHierarchy = async (req, res) => {
       districtId
     } = req.body;
 
+    console.log('Create user with hierarchy - Request body:', req.body);
+
     // Validate inputs
     if (!email || !password) {
+      console.log('Validation failed: Email or password missing');
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
     if (!firstName || !lastName) {
+      console.log('Validation failed: First name or last name missing', { firstName, lastName });
       return res.status(400).json({ error: 'First name and last name are required' });
     }
 
-    // Validate hierarchy selection
-    if (hierarchyLevel && hierarchyLevel !== 'none') {
-      switch (hierarchyLevel) {
-        case 'region':
+    // Validate hierarchy selection based on adminLevel
+    if (adminLevel && adminLevel !== 'USER') {
+      switch (adminLevel) {
+        case 'REGION':
           if (!regionId) {
-            return res.status(400).json({ error: 'Region selection is required' });
+            return res.status(400).json({ error: 'Region selection is required for region admin' });
           }
           break;
-        case 'locality':
+        case 'LOCALITY':
           if (!regionId || !localityId) {
-            return res.status(400).json({ error: 'Region and locality selection are required' });
+            return res.status(400).json({ error: 'Region and locality selection are required for locality admin' });
           }
           break;
-        case 'adminUnit':
+        case 'ADMIN_UNIT':
           if (!regionId || !localityId || !adminUnitId) {
-            return res.status(400).json({ error: 'Region, locality, and admin unit selection are required' });
+            return res.status(400).json({ error: 'Region, locality, and admin unit selection are required for admin unit admin' });
           }
           break;
-        case 'district':
+        case 'DISTRICT':
           if (!regionId || !localityId || !adminUnitId || !districtId) {
-            return res.status(400).json({ error: 'Complete hierarchy selection is required' });
+            return res.status(400).json({ error: 'Complete hierarchy selection is required for district admin' });
           }
           break;
       }

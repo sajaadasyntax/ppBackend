@@ -4,12 +4,78 @@ const userService = require('../services/userService');
 // Get all regions
 exports.getRegions = async (req, res) => {
   try {
+    console.log('🔍 getRegions called from hierarchyController');
+    
+    const adminUser = req.user; // Get the admin user with hierarchy info
+    
+    console.log('👤 User in request:', JSON.stringify({
+      id: adminUser?.id,
+      email: adminUser?.email,
+      adminLevel: adminUser?.adminLevel,
+      regionId: adminUser?.regionId,
+      region: adminUser?.region?.name
+    }, null, 2));
+    
+    let whereClause = { active: true };
+    
+    // Apply hierarchical access control based on admin level
+    if (adminUser) {
+      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+      
+      console.log('🔒 Applying access control:', { adminLevel, regionId });
+      
+      switch (adminLevel) {
+        case 'GENERAL_SECRETARIAT':
+        case 'ADMIN':
+          // Admin and General Secretariat can see all regions
+          console.log('👑 Admin/General Secretariat user - showing all regions');
+          break;
+          
+        case 'REGION':
+        case 'LOCALITY':
+        case 'ADMIN_UNIT':
+        case 'DISTRICT':
+          // These levels can only see their region
+          console.log('🏢 Region/lower level user - filtering to regionId:', regionId);
+          whereClause.id = regionId;
+          break;
+          
+        default:
+          // For other roles, restrict to their specific level
+          if (regionId) {
+            console.log('👤 Regular user with regionId:', regionId);
+            whereClause.id = regionId;
+          } else {
+            console.log('⚠️ User has no regionId assigned!');
+          }
+      }
+    } else {
+      console.log('⚠️ No user information in request! Authentication may have failed.');
+    }
+    
+    console.log('🔍 Finding regions with whereClause:', whereClause);
+    
     const regions = await prisma.region.findMany({
+      where: whereClause,
+      include: {
+        _count: {
+          select: {
+            localities: true,
+            users: true
+          }
+        }
+      },
       orderBy: { name: 'asc' }
     });
+    
+    console.log(`✅ Found ${regions.length} regions based on filters`);
+    if (regions.length > 0) {
+      console.log('📋 Region names:', regions.map(r => r.name).join(', '));
+    }
+    
     res.json(regions);
   } catch (error) {
-    console.error('Error getting regions:', error);
+    console.error('❌ Error getting regions:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

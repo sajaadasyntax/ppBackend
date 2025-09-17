@@ -9,7 +9,7 @@ router.use(authenticate);
 
 // Statistics and overview routes
 router.get('/stats', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.getHierarchyStats);
-router.get('/tree', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.getHierarchyTree);
+router.get('/tree', hierarchyController.getHierarchyTree);
 
 // Region management routes
 router.get('/regions', hierarchyController.getRegions);

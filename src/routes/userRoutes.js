@@ -5,7 +5,8 @@ const { authenticate, authorize } = require('../middlewares/auth');
 const router = express.Router();
 
 // Public routes
-// None
+// Public signup for members (requires later admin activation)
+router.post('/members/public-signup', userController.createMember);
 
 // Protected routes
 router.use(authenticate);

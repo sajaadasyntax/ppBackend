@@ -401,7 +401,11 @@ exports.deleteArchiveDocument = async (req, res) => {
 exports.getSurveys = async (req, res) => {
   try {
     const userId = req.user.id;
-    const surveys = await contentService.getSurveys(userId);
+    const adminUser = req.user;
+    
+    console.log('Getting surveys for user with ID:', adminUser.id);
+    
+    const surveys = await contentService.getSurveys(userId, adminUser);
     res.json(surveys);
   } catch (error) {
     console.error('Error in getSurveys controller:', error);
@@ -413,7 +417,11 @@ exports.getSurveys = async (req, res) => {
 exports.getPublicSurveys = async (req, res) => {
   try {
     const userId = req.user.id;
-    const surveys = await HierarchyService.getUserSurveys(userId);
+    const adminUser = req.user;
+    
+    console.log('Getting public surveys for user with ID:', adminUser.id);
+    
+    const surveys = await contentService.getPublicSurveys(userId, adminUser);
     res.json(surveys);
   } catch (error) {
     console.error('Error in getPublicSurveys controller:', error);
@@ -425,7 +433,11 @@ exports.getPublicSurveys = async (req, res) => {
 exports.getMemberSurveys = async (req, res) => {
   try {
     const userId = req.user.id;
-    const surveys = await contentService.getMemberSurveys(userId);
+    const adminUser = req.user;
+    
+    console.log('Getting member surveys for user with ID:', adminUser.id);
+    
+    const surveys = await contentService.getMemberSurveys(userId, adminUser);
     res.json(surveys);
   } catch (error) {
     console.error('Error in getMemberSurveys controller:', error);
@@ -456,7 +468,12 @@ exports.submitSurveyResponse = async (req, res) => {
 exports.getVotingItems = async (req, res) => {
   try {
     const userId = req.user.id;
-    const votingItems = await HierarchyService.getUserVotingItems(userId);
+    const adminUser = req.user;
+    
+    console.log('Getting voting items for user with ID:', adminUser.id);
+    
+    // Use the updated getVotingItems function with hierarchical filtering
+    const votingItems = await contentService.getVotingItems(userId, adminUser);
     res.json(votingItems);
   } catch (error) {
     console.error('Error in getVotingItems controller:', error);
@@ -501,6 +518,31 @@ exports.createVotingItem = async (req, res) => {
     res.status(201).json(votingItem);
   } catch (error) {
     console.error('Error in createVotingItem controller:', error);
+    
+    if (error.message === 'Missing required fields' || 
+        error.message === 'User not found' || 
+        error.message.includes('targetRegionId is required')) {
+      return res.status(400).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.createSurvey = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const surveyData = req.body;
+    
+    // Validate that hierarchy targeting is provided
+    if (!surveyData.targetRegionId) {
+      return res.status(400).json({ error: 'targetRegionId is required for creating surveys' });
+    }
+    
+    const survey = await contentService.createSurvey(userId, surveyData);
+    res.status(201).json(survey);
+  } catch (error) {
+    console.error('Error in createSurvey controller:', error);
     
     if (error.message === 'Missing required fields' || 
         error.message === 'User not found' || 
@@ -665,17 +707,14 @@ exports.getUserReports = async (req, res) => {
 exports.getAllReports = async (req, res) => {
   try {
     const { status } = req.query;
-    const adminId = req.user.id;
+    const adminUser = req.user;
     
-    // Use hierarchy service to get reports based on admin's managed areas
-    const reports = await HierarchyService.getAdminReports(adminId);
+    console.log('Getting reports for user with ID:', adminUser.id);
     
-    // Filter by status if provided
-    const filteredReports = status ? 
-      reports.filter(report => report.status === status) : 
-      reports;
+    // Use our updated contentService getAllReports function with hierarchical filtering
+    const reports = await contentService.getAllReports(status, adminUser);
     
-    res.json(filteredReports);
+    res.json(reports);
   } catch (error) {
     console.error('Error in getAllReports controller:', error);
     res.status(500).json({ error: 'Internal server error' });

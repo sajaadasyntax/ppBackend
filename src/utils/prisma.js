@@ -8,11 +8,6 @@ const sqliteExists = fs.existsSync(sqliteDbPath);
 
 // Create Prisma client with connection retry logic and fallback mechanism
 const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: "postgresql://neondb_owner:npg_lpyokA50ugQh@ep-curly-sky-abhecrb1-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-    }
-  },
   log: ['warn', 'error'],
   errorFormat: 'pretty',
 });

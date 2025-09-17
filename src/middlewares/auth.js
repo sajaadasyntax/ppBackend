@@ -3,45 +3,13 @@ const { verifyAccessToken } = require('../utils/auth');
 const authenticate = (req, res, next) => {
   console.log('🔐 Authentication middleware called');
   console.log('📝 Request URL:', req.url);
-  console.log('📋 Request headers:', req.headers);
+  console.log('📋 Request headers:', JSON.stringify(req.headers));
   
   // Get the token from headers
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.log('❌ No token provided in headers');
-    
-    // For testing purposes, use a default ADMIN user for hierarchy endpoints
-    // REMOVE THIS IN PRODUCTION
-    if (req.url.includes('hierarchy-management')) {
-      console.log('🔧 Using default ADMIN test user for hierarchy endpoints');
-      req.user = { 
-        id: 'cb3ce8cb-251d-49a9-be47-e8573b5a856d',
-        email: 'admin@pp.com',
-        role: 'ADMIN',
-        adminLevel: 'ADMIN',
-        regionId: null,
-        localityId: null,
-        adminUnitId: null,
-        districtId: null
-      };
-      return next();
-    } else {
-      console.log('🔧 Using default USER test user for other endpoints');
-      req.user = { 
-        id: 'cb3ce8cb-251d-49a9-be47-e8573b5a856d',
-        email: '116461085@example.com',
-        role: 'USER',
-        adminLevel: 'USER',
-        regionId: null,
-        localityId: null,
-        adminUnitId: null,
-        districtId: null
-      };
-      return next();
-    }
-    
-    // Uncomment this in production:
-    // return res.status(401).json({ error: 'Unauthorized - No token provided' });
+    return res.status(401).json({ error: 'Unauthorized - No token provided' });
   }
 
   // Extract token
@@ -52,26 +20,20 @@ const authenticate = (req, res, next) => {
   const decoded = verifyAccessToken(token);
   if (!decoded) {
     console.log('❌ Token verification failed');
-    
-    // For development, if token verification fails, still allow with fallback user
-    console.log('🔧 Token verification failed, using fallback ADMIN user for development');
-    req.user = { 
-      id: 'cb3ce8cb-251d-49a9-be47-e8573b5a856d',
-      email: 'admin@pp.com',
-      role: 'ADMIN',
-      adminLevel: 'ADMIN',
-      regionId: null,
-      localityId: null,
-      adminUnitId: null,
-      districtId: null
-    };
-    return next();
-    
-    // Uncomment this in production:
-    // return res.status(401).json({ error: 'Unauthorized - Invalid token' });
+    return res.status(401).json({ error: 'Unauthorized - Invalid token' });
   }
   
-  console.log('✅ Token verified successfully, user:', decoded);
+  // Print detailed user info
+  console.log('✅ Token verified successfully, user:', JSON.stringify({
+    id: decoded.id,
+    email: decoded.email,
+    adminLevel: decoded.adminLevel,
+    role: decoded.role,
+    regionId: decoded.regionId,
+    localityId: decoded.localityId,
+    adminUnitId: decoded.adminUnitId,
+    districtId: decoded.districtId
+  }, null, 2));
   
   // Set user on request object
   req.user = decoded;
@@ -190,4 +152,35 @@ const authorizeHierarchy = (level, idParam) => {
   };
 };
 
-module.exports = { authenticate, authorize, authorizeRoles, authorizeHierarchy }; 
+// Enforce role-based access restrictions for different applications
+const restrictToUserRole = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized - User not authenticated' });
+  }
+  
+  // Only allow USER role for mobile app and web app
+  if (req.user.role !== 'USER') {
+    return res.status(403).json({ 
+      error: 'Forbidden - This application is only accessible to regular users. Please use the admin panel.' 
+    });
+  }
+  
+  next();
+};
+
+const restrictToAdminRole = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized - User not authenticated' });
+  }
+  
+  // Only allow ADMIN role for admin panel
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ 
+      error: 'Forbidden - This application is only accessible to administrators.' 
+    });
+  }
+  
+  next();
+};
+
+module.exports = { authenticate, authorize, authorizeRoles, authorizeHierarchy, restrictToUserRole, restrictToAdminRole }; 

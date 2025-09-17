@@ -30,6 +30,7 @@ router.use(authenticate);
 
 // Bulletins routes - using the fixed bulletin controller
 router.get('/bulletins', bulletinController.getBulletins);
+router.get('/bulletins/hierarchical', bulletinController.getBulletins); // Added this endpoint for mobile app
 router.post('/bulletins', bulletinController.createBulletin);
 router.put('/bulletins/:id', bulletinController.updateBulletin);
 router.delete('/bulletins/:id', bulletinController.deleteBulletin);
@@ -42,11 +43,15 @@ router.delete('/archive/:id', contentController.deleteArchiveDocument);
 // Surveys routes
 router.get('/surveys', contentController.getSurveys);
 router.get('/surveys/public', contentController.getPublicSurveys);
+router.get('/surveys/public/hierarchical', contentController.getPublicSurveys); // Hierarchical endpoint for mobile
 router.get('/surveys/member', contentController.getMemberSurveys);
+router.get('/surveys/member/hierarchical', contentController.getMemberSurveys); // Hierarchical endpoint for mobile
+router.post('/surveys', contentController.createSurvey);
 router.post('/surveys/:id/respond', contentController.submitSurveyResponse);
 
 // Voting routes
 router.get('/voting', contentController.getVotingItems);
+router.get('/voting/hierarchical', contentController.getVotingItems); // Hierarchical endpoint for mobile
 router.post('/voting', contentController.createVotingItem);
 router.post('/voting/:id/vote', contentController.submitVote);
 

@@ -60,27 +60,21 @@ exports.login = async (req, res) => {
     console.log('Request headers:', req.headers);
     console.log('Client IP:', req.ip);
     
-    const { email, password } = req.body;
+    const { mobileNumber, password } = req.body;
     
     // Check if required fields are provided
-    if (!email || !password) {
-      console.log('Missing email or password');
-      return res.status(400).json({ error: 'Email/Phone and password are required' });
+    if (!mobileNumber || !password) {
+      console.log('Missing mobile number or password');
+      return res.status(400).json({ error: 'Mobile number and password are required' });
     }
     
-    console.log(`Login attempt with identifier: ${email}, password: ${password}`);
+    console.log(`Login attempt with mobile number: ${mobileNumber}, password: ${password}`);
     
-    // Try to find user by email first, then by phone number if not found
-    let user = await userService.getUserByEmail(email);
-    
-    // If user not found by email, try by phone number
-    if (!user) {
-      console.log('User not found by email, trying phone number:', email);
-      user = await userService.getUserByPhone(email);
-    }
+    // Find user by mobile number
+    let user = await userService.getUserByMobileNumber(mobileNumber);
     
     if (!user) {
-      console.log('User not found by email or phone:', email);
+      console.log('User not found by mobile number:', mobileNumber);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
@@ -92,6 +86,12 @@ exports.login = async (req, res) => {
       hashedPassword: user.password ? user.password.substring(0, 10) + '...' : 'not set'
     });
     
+    // Block login if profile is not active
+    const status = user.profile?.status || 'active';
+    if (status !== 'active') {
+      return res.status(403).json({ error: 'الحساب غير مُفعل. يرجى انتظار تفعيل الحساب من المسؤول.' });
+    }
+
     // Check password
     try {
       console.log(`Comparing password "${password}" with hash "${user.password}"`);
@@ -123,6 +123,7 @@ exports.login = async (req, res) => {
       { 
         id: user.id, 
         email: user.email, 
+        mobileNumber: user.mobileNumber,
         role: user.role,
         adminLevel: user.adminLevel || 'USER',
         regionId: user.regionId || null,
@@ -154,6 +155,7 @@ exports.login = async (req, res) => {
         id: user.id,
         name: user.profile ? `${user.profile.firstName || ''} ${user.profile.lastName || ''}`.trim() : '',
         email: user.email,
+        mobileNumber: user.mobileNumber,
         role: user.role,
         adminLevel: user.adminLevel || 'USER',
         regionId: user.regionId || null,

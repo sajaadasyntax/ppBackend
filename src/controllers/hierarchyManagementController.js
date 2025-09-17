@@ -6,11 +6,38 @@ const prisma = new PrismaClient();
  * Handles CRUD operations for administrative hierarchy elements
  */
 
-// Get all regions
+// Get all regions with hierarchical access control
 exports.getRegions = async (req, res) => {
   try {
+    const adminUser = req.user; // Get the admin user with hierarchy info
+    let whereClause = { active: true };
+    
+    // Apply hierarchical access control based on admin level
+    if (adminUser) {
+      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+      
+      switch (adminLevel) {
+        case 'GENERAL_SECRETARIAT':
+        case 'ADMIN':
+          // General Secretariat and Admin can see all regions
+          break;
+          
+        case 'REGION':
+        case 'LOCALITY':
+        case 'ADMIN_UNIT':
+        case 'DISTRICT':
+          // These levels can only see their region
+          whereClause.id = regionId;
+          break;
+          
+        default:
+          // For other roles, restrict to their specific level
+          if (regionId) whereClause.id = regionId;
+      }
+    }
+    
     const regions = await prisma.region.findMany({
-      where: { active: true },
+      where: whereClause,
       include: {
         localities: {
           where: { active: true },
@@ -32,6 +59,8 @@ exports.getRegions = async (req, res) => {
       orderBy: { name: 'asc' }
     });
     
+    console.log(`Returning ${regions.length} regions based on user hierarchy level: ${adminUser?.adminLevel}`);
+    
     res.json(regions);
   } catch (error) {
     console.error('Error fetching regions:', error);
@@ -43,6 +72,21 @@ exports.getRegions = async (req, res) => {
 exports.getLocalitiesByRegion = async (req, res) => {
   try {
     const { regionId } = req.params;
+    const adminUser = req.user;
+    
+    // Check if user has access to this region
+    if (adminUser.adminLevel !== 'ADMIN' && 
+        adminUser.adminLevel !== 'GENERAL_SECRETARIAT' && 
+        adminUser.regionId !== regionId) {
+      console.log('Access denied to localities for user:', {
+        userId: adminUser.id,
+        userRegion: adminUser.regionId,
+        requestedRegion: regionId
+      });
+      return res.status(403).json({ error: 'Access denied to this region' });
+    }
+    
+    console.log('User accessing localities for region:', regionId);
     
     const localities = await prisma.locality.findMany({
       where: { 
@@ -65,6 +109,7 @@ exports.getLocalitiesByRegion = async (req, res) => {
       orderBy: { name: 'asc' }
     });
     
+    console.log(`Found ${localities.length} localities for region ${regionId}`);
     res.json(localities);
   } catch (error) {
     console.error('Error fetching localities:', error);
@@ -76,6 +121,34 @@ exports.getLocalitiesByRegion = async (req, res) => {
 exports.getAdminUnitsByLocality = async (req, res) => {
   try {
     const { localityId } = req.params;
+    const adminUser = req.user;
+    
+    // First, get the locality to check its region
+    const locality = await prisma.locality.findUnique({
+      where: { id: localityId },
+      select: { regionId: true }
+    });
+    
+    if (!locality) {
+      return res.status(404).json({ error: 'Locality not found' });
+    }
+    
+    // Check if user has access to this locality's region
+    if (adminUser.adminLevel !== 'ADMIN' && 
+        adminUser.adminLevel !== 'GENERAL_SECRETARIAT' && 
+        adminUser.regionId !== locality.regionId &&
+        adminUser.localityId !== localityId) {
+      console.log('Access denied to admin units for user:', {
+        userId: adminUser.id,
+        userRegion: adminUser.regionId,
+        userLocality: adminUser.localityId,
+        requestedLocality: localityId,
+        localityRegion: locality.regionId
+      });
+      return res.status(403).json({ error: 'Access denied to this locality' });
+    }
+    
+    console.log('User accessing admin units for locality:', localityId);
     
     const adminUnits = await prisma.adminUnit.findMany({
       where: { 
@@ -93,6 +166,7 @@ exports.getAdminUnitsByLocality = async (req, res) => {
       orderBy: { name: 'asc' }
     });
     
+    console.log(`Found ${adminUnits.length} admin units for locality ${localityId}`);
     res.json(adminUnits);
   } catch (error) {
     console.error('Error fetching admin units:', error);
@@ -104,6 +178,39 @@ exports.getAdminUnitsByLocality = async (req, res) => {
 exports.getDistrictsByAdminUnit = async (req, res) => {
   try {
     const { adminUnitId } = req.params;
+    const adminUser = req.user;
+    
+    // First, get the admin unit to check its locality and region
+    const adminUnit = await prisma.adminUnit.findUnique({
+      where: { id: adminUnitId },
+      include: {
+        locality: { select: { regionId: true } }
+      }
+    });
+    
+    if (!adminUnit) {
+      return res.status(404).json({ error: 'Admin unit not found' });
+    }
+    
+    // Check if user has access to this admin unit's region or locality
+    if (adminUser.adminLevel !== 'ADMIN' && 
+        adminUser.adminLevel !== 'GENERAL_SECRETARIAT' && 
+        adminUser.regionId !== adminUnit.locality.regionId &&
+        adminUser.localityId !== adminUnit.localityId &&
+        adminUser.adminUnitId !== adminUnitId) {
+      console.log('Access denied to districts for user:', {
+        userId: adminUser.id,
+        userRegion: adminUser.regionId,
+        userLocality: adminUser.localityId,
+        userAdminUnit: adminUser.adminUnitId,
+        requestedAdminUnit: adminUnitId,
+        adminUnitLocality: adminUnit.localityId,
+        adminUnitRegion: adminUnit.locality.regionId
+      });
+      return res.status(403).json({ error: 'Access denied to this admin unit' });
+    }
+    
+    console.log('User accessing districts for admin unit:', adminUnitId);
     
     const districts = await prisma.district.findMany({
       where: { 
@@ -118,6 +225,7 @@ exports.getDistrictsByAdminUnit = async (req, res) => {
       orderBy: { name: 'asc' }
     });
     
+    console.log(`Found ${districts.length} districts for admin unit ${adminUnitId}`);
     res.json(districts);
   } catch (error) {
     console.error('Error fetching districts:', error);
@@ -165,7 +273,10 @@ exports.createLocality = async (req, res) => {
   try {
     const { name, code, description, regionId } = req.body;
     
+    console.log('Creating locality with data:', { name, code, description, regionId });
+    
     if (!name || !regionId) {
+      console.log('Validation failed: missing required fields', { name: !!name, regionId: !!regionId });
       return res.status(400).json({ error: 'Locality name and region are required' });
     }
     
@@ -212,7 +323,10 @@ exports.createAdminUnit = async (req, res) => {
   try {
     const { name, code, description, localityId } = req.body;
     
+    console.log('Creating admin unit with data:', { name, code, description, localityId });
+    
     if (!name || !localityId) {
+      console.log('Validation failed: missing required fields', { name: !!name, localityId: !!localityId });
       return res.status(400).json({ error: 'Admin unit name and locality are required' });
     }
     
@@ -261,7 +375,10 @@ exports.createDistrict = async (req, res) => {
   try {
     const { name, code, description, adminUnitId } = req.body;
     
+    console.log('Creating district with data:', { name, code, description, adminUnitId });
+    
     if (!name || !adminUnitId) {
+      console.log('Validation failed: missing required fields', { name: !!name, adminUnitId: !!adminUnitId });
       return res.status(400).json({ error: 'District name and admin unit are required' });
     }
     
@@ -613,10 +730,13 @@ exports.deleteDistrict = async (req, res) => {
 exports.getHierarchyStats = async (req, res) => {
   try {
     const stats = {
-      regions: await prisma.region.count({ where: { active: true } }),
-      localities: await prisma.locality.count({ where: { active: true } }),
-      adminUnits: await prisma.adminUnit.count({ where: { active: true } }),
-      districts: await prisma.district.count({ where: { active: true } }),
+      counts: {
+        regions: await prisma.region.count({ where: { active: true } }),
+        localities: await prisma.locality.count({ where: { active: true } }),
+        adminUnits: await prisma.adminUnit.count({ where: { active: true } }),
+        districts: await prisma.district.count({ where: { active: true } }),
+        users: await prisma.user.count()
+      },
       totalUsers: await prisma.user.count(),
       usersWithHierarchy: await prisma.user.count({
         where: {
@@ -640,8 +760,35 @@ exports.getHierarchyStats = async (req, res) => {
 // Get full hierarchy tree
 exports.getHierarchyTree = async (req, res) => {
   try {
+    const adminUser = req.user; // Get the admin user with hierarchy info
+    let whereClause = { active: true };
+    
+    // Apply hierarchical access control based on admin level
+    if (adminUser) {
+      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+      
+      switch (adminLevel) {
+        case 'GENERAL_SECRETARIAT':
+        case 'ADMIN':
+          // Admin and General Secretariat can see all regions
+          break;
+          
+        case 'REGION':
+        case 'LOCALITY':
+        case 'ADMIN_UNIT':
+        case 'DISTRICT':
+          // These levels can only see their region
+          whereClause.id = regionId;
+          break;
+          
+        default:
+          // For other roles, restrict to their specific level
+          if (regionId) whereClause.id = regionId;
+      }
+    }
+    
     const tree = await prisma.region.findMany({
-      where: { active: true },
+      where: whereClause,
       include: {
         localities: {
           where: { active: true },

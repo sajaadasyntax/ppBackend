@@ -10,7 +10,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://neondb_owner:npg_lpyokA50ugQh@ep-curly-sky-abhecrb1-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+  url      = env("DATABASE_URL")
 }
 
 // Administrative level enum for user roles hierarchy
@@ -48,6 +48,7 @@ model Region {
   surveys       Survey[]       // Surveys targeted to this region
   votingItems   VotingItem[]   // Voting items targeted to this region
   reports       Report[]       // Reports targeted to this region
+  plans         SubscriptionPlan[] @relation("RegionPlans")  // Subscription plans for this region
 }
 
 // Locality model represents المحلية level
@@ -77,6 +78,7 @@ model Locality {
   surveys       Survey[]       // Surveys targeted to this locality
   votingItems   VotingItem[]   // Voting items targeted to this locality
   reports       Report[]       // Reports targeted to this locality
+  plans         SubscriptionPlan[] @relation("LocalityPlans")  // Subscription plans for this locality
 }
 
 // AdminUnit model represents الوحدة الادارية level
@@ -106,6 +108,7 @@ model AdminUnit {
   surveys       Survey[]       // Surveys targeted to this admin unit
   votingItems   VotingItem[]   // Voting items targeted to this admin unit
   reports       Report[]       // Reports targeted to this admin unit
+  plans         SubscriptionPlan[] @relation("AdminUnitPlans")  // Subscription plans for this admin unit
 }
 
 // District model represents الحي level
@@ -134,11 +137,13 @@ model District {
   surveys       Survey[]       // Surveys targeted to this district
   votingItems   VotingItem[]   // Voting items targeted to this district
   reports       Report[]       // Reports targeted to this district
+  plans         SubscriptionPlan[] @relation("DistrictPlans")  // Subscription plans for this district
 }
 
 model User {
   id             String         @id @default(uuid())
-  email          String         @unique
+  email          String?        @unique
+  mobileNumber   String         @unique
   password       String
   role           String         @default("USER") // For backward compatibility
   adminLevel     AdminLevel     @default(USER)
@@ -152,6 +157,8 @@ model User {
   reports        Report[]
   votingItems    VotingItem[]   // Created voting items
   subscriptions  Subscription[]
+  createdPlans   SubscriptionPlan[] @relation("PlanCreator")
+  approvedPlans  SubscriptionPlan[] @relation("PlanApprover")
   
   // Administrative hierarchy references
   regionId       String?        // الولاية
@@ -242,6 +249,7 @@ model Survey {
   description String
   dueDate     DateTime
   questions   String          // Stored as JSON string
+  audience    String          @default("public") // "public" or "member"
   published   Boolean         @default(false)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
@@ -336,14 +344,31 @@ model Report {
 model SubscriptionPlan {
   id          String   @id @default(uuid())
   title       String
+  description String?
   price       String
   currency    String
   period      String
   features    String   // Stored as JSON string
   active      Boolean  @default(true)
+  isApproved  Boolean  @default(false)
+  isDonation  Boolean  @default(false) // True for donation requests, false for fixed subscriptions
+  creatorId   String?
+  creator     User?    @relation("PlanCreator", fields: [creatorId], references: [id])
+  approverId  String?
+  approver    User?    @relation("PlanApprover", fields: [approverId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   subscriptions Subscription[]
+  
+  // Target hierarchy - plan is visible to users in this hierarchy and below
+  targetRegionId     String?   // If set, only users in this region and its children see this
+  targetRegion       Region?   @relation("RegionPlans", fields: [targetRegionId], references: [id])
+  targetLocalityId   String?   // If set, only users in this locality and its children see this
+  targetLocality     Locality? @relation("LocalityPlans", fields: [targetLocalityId], references: [id])
+  targetAdminUnitId  String?   // If set, only users in this admin unit and its children see this
+  targetAdminUnit    AdminUnit? @relation("AdminUnitPlans", fields: [targetAdminUnitId], references: [id])
+  targetDistrictId   String?   // If set, only users in this district see this
+  targetDistrict     District? @relation("DistrictPlans", fields: [targetDistrictId], references: [id])
 }
 
 model Subscription {
@@ -354,6 +379,11 @@ model Subscription {
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   startDate   DateTime
   endDate     DateTime
+  amount      String          // Actual amount paid (could be different from plan price for donations)
+  receipt     String?         // URL to receipt image or document
+  paymentDate DateTime?
+  paymentMethod String?
+  paymentStatus String        @default("pending") // pending, paid, cancelled
   status      String          @default("active")
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt

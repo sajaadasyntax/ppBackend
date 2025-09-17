@@ -29,8 +29,10 @@ async function createSpecificUser() {
     const user = await prisma.user.create({
       data: {
         email: '116461085@example.com',
+        mobileNumber: '116461085',
         password: hashedPassword,
         role: 'USER',
+        adminLevel: 'USER',
         profile: {
           create: {
             firstName: 'User',

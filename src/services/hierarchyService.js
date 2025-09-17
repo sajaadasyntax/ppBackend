@@ -155,6 +155,103 @@ class HierarchyService {
   }
 
   /**
+   * Get subscription plans filtered by user's hierarchy
+   * @param {string} userId - User ID
+   * @returns {Array} Filtered subscription plans
+   */
+  static async getUserSubscriptionPlans(userId) {
+    const user = await this.getUserWithHierarchy(userId);
+    if (!user) return [];
+
+    const filter = this.buildContentFilter(user);
+    
+    return await prisma.subscriptionPlan.findMany({
+      where: {
+        active: true,
+        isApproved: true,
+        ...filter
+      },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            profile: true,
+            adminLevel: true
+          }
+        },
+        approver: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            profile: true,
+            adminLevel: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  /**
+   * Get users who should see a subscription plan based on its target hierarchy
+   * @param {Object} plan - Subscription plan with target hierarchy
+   * @returns {Array} Users who should see this plan
+   */
+  static async getUsersForSubscriptionPlan(plan) {
+    const whereClause = {};
+
+    // Build WHERE clause based on plan's target hierarchy
+    if (plan.targetDistrictId) {
+      // District-level plan: only users in this specific district
+      whereClause.districtId = plan.targetDistrictId;
+    } else if (plan.targetAdminUnitId) {
+      // Admin unit-level plan: users in this admin unit and its districts
+      whereClause.adminUnitId = plan.targetAdminUnitId;
+    } else if (plan.targetLocalityId) {
+      // Locality-level plan: users in this locality and its admin units/districts
+      whereClause.localityId = plan.targetLocalityId;
+    } else if (plan.targetRegionId) {
+      // Region-level plan: users in this region and all its sub-levels
+      whereClause.regionId = plan.targetRegionId;
+    } else {
+      // Global plan: all users
+      return await prisma.user.findMany({
+        where: { role: 'USER' }, // Only regular users, not admins
+        select: {
+          id: true,
+          email: true,
+          mobileNumber: true,
+          profile: true,
+          regionId: true,
+          localityId: true,
+          adminUnitId: true,
+          districtId: true
+        }
+      });
+    }
+
+    return await prisma.user.findMany({
+      where: {
+        ...whereClause,
+        role: 'USER' // Only regular users, not admins
+      },
+      select: {
+        id: true,
+        email: true,
+        mobileNumber: true,
+        profile: true,
+        regionId: true,
+        localityId: true,
+        adminUnitId: true,
+        districtId: true
+      }
+    });
+  }
+
+  /**
    * Get voting items filtered by user's hierarchy
    * @param {string} userId - User ID
    * @returns {Array} Filtered voting items

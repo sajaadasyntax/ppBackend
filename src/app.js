@@ -10,14 +10,24 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const hierarchyRoutes = require('./routes/hierarchyRoutes');
 const adminHierarchyRoutes = require('./routes/adminHierarchyRoutes');
 const hierarchyManagementRoutes = require('./routes/hierarchyManagementRoutes');
-const debugRoutes = require('./routes/debugRoutes');
+const hierarchicalUserRoutes = require('./routes/hierarchicalUserRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const publicRoutes = require('./routes/publicRoutes');
+// const debugRoutes = require('./routes/debugRoutes'); // Removed - no longer needed
 
 // Create Express app
 const app = express();
 
 // CORS configuration
 const corsOptions = {
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
+  origin: [
+    'http://localhost:3000', 
+    'http://localhost:3001', 
+    'http://localhost:3002',
+    'https://pp-admin-h8ovg914n-sajaaads-projects.vercel.app',
+    process.env.FRONTEND_URL // Optional: Add environment variable support
+  ].filter(Boolean), // Filter out undefined/null entries
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Type', 'Authorization'],
@@ -100,7 +110,12 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/hierarchy', hierarchyRoutes);
 app.use('/api/admin/hierarchy', adminHierarchyRoutes);
 app.use('/api/hierarchy-management', hierarchyManagementRoutes);
-app.use('/api/debug', debugRoutes);
+app.use('/api/hierarchical', hierarchicalUserRoutes);
+app.use('/api/hierarchical-users', hierarchicalUserRoutes); // Alias for frontend compatibility
+app.use('/api/admin', adminRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/public', publicRoutes);
+// app.use('/api/debug', debugRoutes); // Removed - no longer needed
 
 // Health check endpoint
 app.get('/health', (req, res) => {

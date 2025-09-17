@@ -40,11 +40,11 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
-// Get bulletins with proper logging
+// Get bulletins with hierarchical access control
 exports.getBulletins = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const bulletins = await contentService.getBulletins(userId);
+    const adminUser = req.user; // Get the admin user with hierarchy info
+    const bulletins = await contentService.getBulletins(adminUser);
     res.json(bulletins);
   } catch (error) {
     console.error('Error in getBulletins controller:', error);

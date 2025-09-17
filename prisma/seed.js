@@ -13,6 +13,7 @@ async function createUsers() {
     update: {},
     create: {
       email: 'admin@pp.com',
+      mobileNumber: '+249123456789',
       password: adminPassword,
       role: 'ADMIN',
       adminLevel: 'ADMIN',
@@ -34,6 +35,7 @@ async function createUsers() {
     update: {},
     create: {
       email: 'admin@example.com',
+      mobileNumber: '+249123456790',
       password: adminPassword,
       role: 'ADMIN',
       adminLevel: 'ADMIN',
@@ -41,7 +43,7 @@ async function createUsers() {
         create: {
           firstName: 'مدير',
           lastName: 'النظام',
-          phoneNumber: '123456789',
+          phoneNumber: '+249123456790',
         }
       }
     },
@@ -55,6 +57,7 @@ async function createUsers() {
     update: {},
     create: {
       email: 'user@example.com',
+      mobileNumber: '+249987654321',
       password: userPassword,
       role: 'USER',
       adminLevel: 'USER',
@@ -62,7 +65,7 @@ async function createUsers() {
         create: {
           firstName: 'مستخدم',
           lastName: 'عادي',
-          phoneNumber: '987654321',
+          phoneNumber: '+249987654321',
         }
       }
     },

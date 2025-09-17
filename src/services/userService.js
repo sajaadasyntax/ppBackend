@@ -10,6 +10,7 @@ async function createUser(userData) {
     adminLevel, 
     profile, 
     memberDetails, 
+    mobileNumber,
     regionId,
     localityId,
     adminUnitId,
@@ -42,6 +43,9 @@ async function createUser(userData) {
 
   // Create user with profile and memberDetails in a transaction
   return prisma.$transaction(async (tx) => {
+    // Determine primary mobile number for the user record
+    const primaryMobileNumber = mobileNumber || profile?.phoneNumber || memberDetails?.mobile;
+
     // Create the user
     const user = await tx.user.create({
       data: {
@@ -49,6 +53,7 @@ async function createUser(userData) {
         password: hashedPassword,
         role: role || 'USER', // For backward compatibility
         adminLevel: resolvedAdminLevel,
+        mobileNumber: primaryMobileNumber,
         
         // Add hierarchy references if provided
         regionId: regionId || undefined,
@@ -262,6 +267,21 @@ async function getUserByEmail(email) {
   });
 }
 
+// Get user by mobile number (primary authentication method)
+async function getUserByMobileNumber(mobileNumber) {
+  return prisma.user.findUnique({
+    where: { mobileNumber },
+    include: { 
+      profile: true,
+      memberDetails: true,
+      region: true,
+      locality: true,
+      adminUnit: true,
+      district: true
+    }
+  });
+}
+
 // Get user by phone number
 async function getUserByPhone(phoneNumber) {
   // First try to find by profile.phoneNumber
@@ -468,19 +488,49 @@ async function deleteUser(id) {
 }
 
 // Get all users
-async function getAllUsers(page = 1, limit = 10, filters = {}) {
+async function getAllUsers(page = 1, limit = 10, adminUser = null) {
   const skip = (page - 1) * limit;
   
   // Build the where clause based on filters
   const where = {};
   
-  // Apply administrative hierarchy filters if provided
-  if (filters.regionId) where.regionId = filters.regionId;
-  if (filters.localityId) where.localityId = filters.localityId;
-  if (filters.adminUnitId) where.adminUnitId = filters.adminUnitId;
-  if (filters.districtId) where.districtId = filters.districtId;
-  if (filters.adminLevel) where.adminLevel = filters.adminLevel;
-  if (filters.role) where.role = filters.role;
+  // Apply hierarchical access control if adminUser is provided
+  if (adminUser) {
+    const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+    
+    switch (adminLevel) {
+      case 'GENERAL_SECRETARIAT':
+        // General Secretariat can see all users
+        break;
+        
+      case 'REGION':
+        // Region admin can see users in their region and all sub-levels
+        where.regionId = regionId;
+        break;
+        
+      case 'LOCALITY':
+        // Locality admin can see users in their locality and all sub-levels
+        where.localityId = localityId;
+        break;
+        
+      case 'ADMIN_UNIT':
+        // Admin unit admin can see users in their admin unit and all sub-levels
+        where.adminUnitId = adminUnitId;
+        break;
+        
+      case 'DISTRICT':
+        // District admin can only see users in their district
+        where.districtId = districtId;
+        break;
+        
+      default:
+        // For other roles, restrict to their specific level
+        if (districtId) where.districtId = districtId;
+        else if (adminUnitId) where.adminUnitId = adminUnitId;
+        else if (localityId) where.localityId = localityId;
+        else if (regionId) where.regionId = regionId;
+    }
+  }
   
   const [users, total] = await Promise.all([
     prisma.user.findMany({
@@ -518,7 +568,7 @@ async function getAllUsers(page = 1, limit = 10, filters = {}) {
 }
 
 // Get all users formatted as memberships for the admin panel
-async function getMemberships(status, role) {
+async function getMemberships(status, role, adminUser = null) {
   try {
     // Build where clause based on filters
     const whereClause = {};
@@ -533,6 +583,44 @@ async function getMemberships(status, role) {
     // Add role filter if provided
     if (role) {
       whereClause.role = role;
+    }
+    
+    // Apply hierarchical access control if adminUser is provided
+    if (adminUser) {
+      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+      
+      switch (adminLevel) {
+        case 'GENERAL_SECRETARIAT':
+          // General Secretariat can see all users
+          break;
+          
+        case 'REGION':
+          // Region admin can see users in their region and all sub-levels
+          whereClause.regionId = regionId;
+          break;
+          
+        case 'LOCALITY':
+          // Locality admin can see users in their locality and all sub-levels
+          whereClause.localityId = localityId;
+          break;
+          
+        case 'ADMIN_UNIT':
+          // Admin unit admin can see users in their admin unit and all sub-levels
+          whereClause.adminUnitId = adminUnitId;
+          break;
+          
+        case 'DISTRICT':
+          // District admin can only see users in their district
+          whereClause.districtId = districtId;
+          break;
+          
+        default:
+          // For other roles, restrict to their specific level
+          if (districtId) whereClause.districtId = districtId;
+          else if (adminUnitId) whereClause.adminUnitId = adminUnitId;
+          else if (localityId) whereClause.localityId = localityId;
+          else if (regionId) whereClause.regionId = regionId;
+      }
     }
     
     const users = await prisma.user.findMany({
@@ -714,11 +802,217 @@ async function getAdminHierarchy() {
   return regions;
 }
 
+// Create admin account with hierarchical validation
+async function createAdminAccount(creatorAdmin, adminData) {
+  const { 
+    email, 
+    mobileNumber,
+    password, 
+    adminLevel, 
+    profile, 
+    regionId,
+    localityId,
+    adminUnitId,
+    districtId 
+  } = adminData;
+
+  // Validate that the creator can create this admin level
+  if (!canCreateAdminAtLevel(creatorAdmin.adminLevel, adminLevel)) {
+    throw new Error(`You don't have permission to create ${adminLevel} level admins`);
+  }
+
+  // Validate hierarchy assignment based on creator's level
+  const validatedHierarchy = await validateHierarchyAssignment(creatorAdmin, {
+    adminLevel,
+    regionId,
+    localityId,
+    adminUnitId,
+    districtId
+  });
+
+  // Hash the password
+  const hashedPassword = await hashPassword(password);
+
+  // Create admin user with profile in a transaction
+  return prisma.$transaction(async (tx) => {
+    // Create the admin user
+    const user = await tx.user.create({
+      data: {
+        email,
+        mobileNumber,
+        password: hashedPassword,
+        role: 'ADMIN',
+        adminLevel: adminLevel,
+        
+        // Add validated hierarchy references
+        regionId: validatedHierarchy.regionId,
+        localityId: validatedHierarchy.localityId,
+        adminUnitId: validatedHierarchy.adminUnitId,
+        districtId: validatedHierarchy.districtId,
+        
+        profile: profile ? {
+          create: {
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            phoneNumber: profile.phoneNumber || mobileNumber,
+            avatarUrl: profile.avatarUrl,
+            status: profile.status || 'active'
+          }
+        } : {
+          create: {
+            firstName: profile?.firstName || 'Admin',
+            lastName: profile?.lastName || 'User',
+            phoneNumber: mobileNumber,
+            status: 'active'
+          }
+        }
+      },
+      include: {
+        profile: true,
+        region: true,
+        locality: true,
+        adminUnit: true,
+        district: true
+      }
+    });
+
+    return user;
+  });
+}
+
+// Check if creator can create admin at specified level
+function canCreateAdminAtLevel(creatorLevel, targetLevel) {
+  const hierarchy = {
+    'GENERAL_SECRETARIAT': 5,
+    'REGION': 4,
+    'LOCALITY': 3,
+    'ADMIN_UNIT': 2,
+    'DISTRICT': 1
+  };
+
+  const creatorRank = hierarchy[creatorLevel] || 0;
+  const targetRank = hierarchy[targetLevel] || 0;
+
+  // Creator can only create admins at levels below them
+  return creatorRank > targetRank;
+}
+
+// Validate hierarchy assignment based on creator's permissions
+async function validateHierarchyAssignment(creatorAdmin, targetData) {
+  const { adminLevel, regionId, localityId, adminUnitId, districtId } = targetData;
+  const { adminLevel: creatorLevel, regionId: creatorRegionId, localityId: creatorLocalityId, adminUnitId: creatorAdminUnitId, districtId: creatorDistrictId } = creatorAdmin;
+
+  const validated = {};
+
+  switch (creatorLevel) {
+    case 'GENERAL_SECRETARIAT':
+      // Can assign to any hierarchy level
+      validated.regionId = regionId;
+      validated.localityId = localityId;
+      validated.adminUnitId = adminUnitId;
+      validated.districtId = districtId;
+      break;
+
+    case 'REGION':
+      // Can only assign within their region
+      validated.regionId = creatorRegionId;
+      validated.localityId = localityId && await isLocalityInRegion(localityId, creatorRegionId) ? localityId : null;
+      validated.adminUnitId = adminUnitId && await isAdminUnitInRegion(adminUnitId, creatorRegionId) ? adminUnitId : null;
+      validated.districtId = districtId && await isDistrictInRegion(districtId, creatorRegionId) ? districtId : null;
+      break;
+
+    case 'LOCALITY':
+      // Can only assign within their locality
+      validated.regionId = creatorRegionId;
+      validated.localityId = creatorLocalityId;
+      validated.adminUnitId = adminUnitId && await isAdminUnitInLocality(adminUnitId, creatorLocalityId) ? adminUnitId : null;
+      validated.districtId = districtId && await isDistrictInLocality(districtId, creatorLocalityId) ? districtId : null;
+      break;
+
+    case 'ADMIN_UNIT':
+      // Can only assign within their admin unit
+      validated.regionId = creatorRegionId;
+      validated.localityId = creatorLocalityId;
+      validated.adminUnitId = creatorAdminUnitId;
+      validated.districtId = districtId && await isDistrictInAdminUnit(districtId, creatorAdminUnitId) ? districtId : null;
+      break;
+
+    case 'DISTRICT':
+      // Can only assign within their district
+      validated.regionId = creatorRegionId;
+      validated.localityId = creatorLocalityId;
+      validated.adminUnitId = creatorAdminUnitId;
+      validated.districtId = creatorDistrictId;
+      break;
+
+    default:
+      throw new Error('Invalid creator admin level');
+  }
+
+  return validated;
+}
+
+// Helper functions to validate hierarchy relationships
+async function isLocalityInRegion(localityId, regionId) {
+  const locality = await prisma.locality.findFirst({
+    where: { id: localityId, regionId }
+  });
+  return !!locality;
+}
+
+async function isAdminUnitInRegion(adminUnitId, regionId) {
+  const adminUnit = await prisma.adminUnit.findFirst({
+    where: { 
+      id: adminUnitId,
+      locality: { regionId }
+    }
+  });
+  return !!adminUnit;
+}
+
+async function isAdminUnitInLocality(adminUnitId, localityId) {
+  const adminUnit = await prisma.adminUnit.findFirst({
+    where: { id: adminUnitId, localityId }
+  });
+  return !!adminUnit;
+}
+
+async function isDistrictInRegion(districtId, regionId) {
+  const district = await prisma.district.findFirst({
+    where: { 
+      id: districtId,
+      adminUnit: { 
+        locality: { regionId }
+      }
+    }
+  });
+  return !!district;
+}
+
+async function isDistrictInLocality(districtId, localityId) {
+  const district = await prisma.district.findFirst({
+    where: { 
+      id: districtId,
+      adminUnit: { localityId }
+    }
+  });
+  return !!district;
+}
+
+async function isDistrictInAdminUnit(districtId, adminUnitId) {
+  const district = await prisma.district.findFirst({
+    where: { id: districtId, adminUnitId }
+  });
+  return !!district;
+}
+
 module.exports = {
   createUser,
+  createAdminAccount,
   getUserById,
   getUserByEmail,
   getUserByPhone,
+  getUserByMobileNumber,
   updateUser,
   updateUserPassword,
   deleteUser,
