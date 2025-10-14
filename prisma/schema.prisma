@@ -143,7 +143,7 @@ model District {
 model User {
   id             String         @id @default(uuid())
   email          String?        @unique
-  mobileNumber   String         @unique
+  mobileNumber   String         @unique // E.164 format: +249XXXXXXXXX
   password       String
   role           String         @default("USER") // For backward compatibility
   adminLevel     AdminLevel     @default(USER)
@@ -175,6 +175,13 @@ model User {
   managedLocalities   Locality[]     @relation("LocalityAdmin")
   managedAdminUnits   AdminUnit[]    @relation("AdminUnitAdmin")
   managedDistricts    District[]     @relation("DistrictAdmin")
+  
+  // Chat relationships
+  createdChatRooms    ChatRoom[]     @relation("ChatRoomCreator")
+  chatMemberships     ChatMembership[]
+  sentMessages        ChatMessage[]
+  
+  @@index([mobileNumber])
 }
 
 model Profile {
@@ -447,6 +454,45 @@ model MemberDetails {
   // Timestamps
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+// Chat Models
+model ChatRoom {
+  id          String   @id @default(uuid())
+  title       String
+  createdById String
+  createdBy   User     @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  memberships ChatMembership[]
+  messages    ChatMessage[]
+}
+
+model ChatMembership {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime @default(now())
+  
+  @@unique([roomId, userId])
+  @@index([userId])
+  @@index([roomId])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+  
+  @@index([roomId, createdAt])
+  @@index([senderId])
 }
 
 // Role enum replaced with String for SQLite compatibility

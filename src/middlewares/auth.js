@@ -183,4 +183,7 @@ const restrictToAdminRole = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, authorize, authorizeRoles, authorizeHierarchy, restrictToUserRole, restrictToAdminRole }; 
+// Alias for restrictToAdminRole
+const requireAdmin = restrictToAdminRole;
+
+module.exports = { authenticate, authorize, authorizeRoles, authorizeHierarchy, restrictToUserRole, restrictToAdminRole, requireAdmin }; 

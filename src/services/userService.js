@@ -1,5 +1,6 @@
 const prisma = require('../utils/prisma');
 const { hashPassword } = require('../utils/auth');
+const { normalizeMobileNumber } = require('../utils/mobileNormalization');
 
 // Create a new user
 async function createUser(userData) {
@@ -45,6 +46,22 @@ async function createUser(userData) {
   return prisma.$transaction(async (tx) => {
     // Determine primary mobile number for the user record
     const primaryMobileNumber = mobileNumber || profile?.phoneNumber || memberDetails?.mobile;
+    
+    if (!primaryMobileNumber) {
+      throw new Error('Mobile number is required');
+    }
+
+    // Normalize mobile number to E.164 format
+    const normalizedMobile = normalizeMobileNumber(primaryMobileNumber);
+
+    // Check for duplicate mobile number
+    const existingUser = await tx.user.findUnique({
+      where: { mobileNumber: normalizedMobile }
+    });
+
+    if (existingUser) {
+      throw new Error('Mobile number already in use');
+    }
 
     // Create the user
     const user = await tx.user.create({
@@ -53,7 +70,7 @@ async function createUser(userData) {
         password: hashedPassword,
         role: role || 'USER', // For backward compatibility
         adminLevel: resolvedAdminLevel,
-        mobileNumber: primaryMobileNumber,
+        mobileNumber: normalizedMobile,
         
         // Add hierarchy references if provided
         regionId: regionId || undefined,

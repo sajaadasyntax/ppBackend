@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const userService = require('../services/userService');
+const { normalizeMobileNumber } = require('../utils/mobileNormalization');
 
 // Register a new user
 exports.register = async (req, res) => {
@@ -70,8 +71,18 @@ exports.login = async (req, res) => {
     
     console.log(`Login attempt with mobile number: ${mobileNumber}, password: ${password}`);
     
+    // Normalize mobile number to E.164 format
+    let normalizedMobile;
+    try {
+      normalizedMobile = normalizeMobileNumber(mobileNumber);
+      console.log(`Normalized mobile number: ${normalizedMobile}`);
+    } catch (error) {
+      console.log('Invalid mobile number format:', error.message);
+      return res.status(400).json({ error: 'Invalid mobile number format' });
+    }
+    
     // Find user by mobile number
-    let user = await userService.getUserByMobileNumber(mobileNumber);
+    let user = await userService.getUserByMobileNumber(normalizedMobile);
     
     if (!user) {
       console.log('User not found by mobile number:', mobileNumber);

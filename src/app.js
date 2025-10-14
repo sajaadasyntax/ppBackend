@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 // Import routes
@@ -14,10 +16,12 @@ const hierarchicalUserRoutes = require('./routes/hierarchicalUserRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const publicRoutes = require('./routes/publicRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 // const debugRoutes = require('./routes/debugRoutes'); // Removed - no longer needed
 
-// Create Express app
+// Create Express app and HTTP server
 const app = express();
+const server = http.createServer(app);
 
 // CORS configuration
 const corsOptions = {
@@ -115,6 +119,7 @@ app.use('/api/hierarchical-users', hierarchicalUserRoutes); // Alias for fronten
 app.use('/api/admin', adminRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/chat', chatRoutes);
 // app.use('/api/debug', debugRoutes); // Removed - no longer needed
 
 // Health check endpoint
@@ -157,10 +162,148 @@ app.get('/api/status', (req, res) => {
     });
 });
 
+// Setup Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001', 
+      'http://localhost:3002',
+      'http://localhost:19000',
+      'http://localhost:19001',
+      'http://localhost:19002',
+      'http://localhost:8081',
+      'https://pp-admin-h8ovg914n-sajaaads-projects.vercel.app',
+      process.env.FRONTEND_URL
+    ].filter(Boolean),
+    credentials: true
+  }
+});
+
+// Socket.IO authentication middleware
+const { verifyAccessToken } = require('./utils/auth');
+const prisma = require('./utils/prisma');
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  
+  if (!token) {
+    return next(new Error('Authentication error: No token provided'));
+  }
+
+  const decoded = verifyAccessToken(token);
+  if (!decoded) {
+    return next(new Error('Authentication error: Invalid token'));
+  }
+
+  socket.userId = decoded.id;
+  socket.user = decoded;
+  next();
+});
+
+// Socket.IO connection handler
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.userId}`);
+
+  // Join chat rooms
+  socket.on('join_room', async (roomId) => {
+    try {
+      // Verify user is a member of this room
+      const membership = await prisma.chatMembership.findUnique({
+        where: {
+          roomId_userId: {
+            roomId,
+            userId: socket.userId
+          }
+        }
+      });
+
+      if (!membership) {
+        socket.emit('error', { message: 'Not a member of this room' });
+        return;
+      }
+
+      socket.join(roomId);
+      console.log(`User ${socket.userId} joined room ${roomId}`);
+    } catch (error) {
+      console.error('Error joining room:', error);
+      socket.emit('error', { message: 'Failed to join room' });
+    }
+  });
+
+  // Leave chat room
+  socket.on('leave_room', (roomId) => {
+    socket.leave(roomId);
+    console.log(`User ${socket.userId} left room ${roomId}`);
+  });
+
+  // Handle new message
+  socket.on('send_message', async ({ roomId, text }) => {
+    try {
+      // Verify membership
+      const membership = await prisma.chatMembership.findUnique({
+        where: {
+          roomId_userId: {
+            roomId,
+            userId: socket.userId
+          }
+        }
+      });
+
+      if (!membership) {
+        socket.emit('error', { message: 'Not a member of this room' });
+        return;
+      }
+
+      // Create message
+      const message = await prisma.chatMessage.create({
+        data: {
+          roomId,
+          senderId: socket.userId,
+          text: text.trim()
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              memberDetails: {
+                select: {
+                  fullName: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // Update room's updatedAt
+      await prisma.chatRoom.update({
+        where: { id: roomId },
+        data: { updatedAt: new Date() }
+      });
+
+      // Broadcast to all members in the room
+      io.to(roomId).emit('new_message', message);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      socket.emit('error', { message: 'Failed to send message' });
+    }
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.userId}`);
+  });
+});
+
+// Make io available to routes if needed
+app.set('io', io);
+
 // Start server
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Socket.IO enabled on port ${PORT}`);
 });
 
 // Graceful shutdown
