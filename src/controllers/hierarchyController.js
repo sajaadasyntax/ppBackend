@@ -115,8 +115,8 @@ exports.createRegion = async (req, res) => {
     const region = await prisma.region.create({
       data: {
         name,
-        code,
-        description,
+        code: code && code.trim() ? code.trim() : undefined, // Convert empty strings to undefined/null
+        description: description && description.trim() ? description.trim() : undefined,
         adminId: adminId || undefined
       }
     });
@@ -124,6 +124,9 @@ exports.createRegion = async (req, res) => {
     res.status(201).json(region);
   } catch (error) {
     console.error('Error creating region:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'A region with this code already exists' });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -223,7 +226,9 @@ exports.getLocalityById = async (req, res) => {
 // Create new locality
 exports.createLocality = async (req, res) => {
   try {
-    const { name, code, description, regionId, adminId } = req.body;
+    const { name, code, description, adminId } = req.body;
+    // regionId can come from URL params or request body
+    const regionId = req.params.regionId || req.body.regionId;
     
     if (!regionId) {
       return res.status(400).json({ error: 'Region ID is required' });
@@ -232,8 +237,8 @@ exports.createLocality = async (req, res) => {
     const locality = await prisma.locality.create({
       data: {
         name,
-        code,
-        description,
+        code: code && code.trim() ? code.trim() : undefined, // Convert empty strings to undefined/null
+        description: description && description.trim() ? description.trim() : undefined,
         regionId,
         adminId: adminId || undefined
       }
@@ -244,6 +249,9 @@ exports.createLocality = async (req, res) => {
     console.error('Error creating locality:', error);
     if (error.code === 'P2003') {
       return res.status(400).json({ error: 'Invalid region ID' });
+    }
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'A locality with this code already exists' });
     }
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -352,7 +360,9 @@ exports.getAdminUnitById = async (req, res) => {
 // Create new admin unit
 exports.createAdminUnit = async (req, res) => {
   try {
-    const { name, code, description, localityId, adminId } = req.body;
+    const { name, code, description, adminId } = req.body;
+    // localityId can come from URL params or request body
+    const localityId = req.params.localityId || req.body.localityId;
     
     if (!localityId) {
       return res.status(400).json({ error: 'Locality ID is required' });
@@ -361,8 +371,8 @@ exports.createAdminUnit = async (req, res) => {
     const adminUnit = await prisma.adminUnit.create({
       data: {
         name,
-        code,
-        description,
+        code: code && code.trim() ? code.trim() : undefined, // Convert empty strings to undefined/null
+        description: description && description.trim() ? description.trim() : undefined,
         localityId,
         adminId: adminId || undefined
       }
@@ -373,6 +383,9 @@ exports.createAdminUnit = async (req, res) => {
     console.error('Error creating administrative unit:', error);
     if (error.code === 'P2003') {
       return res.status(400).json({ error: 'Invalid locality ID' });
+    }
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'An administrative unit with this code already exists' });
     }
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -484,7 +497,9 @@ exports.getDistrictById = async (req, res) => {
 // Create new district
 exports.createDistrict = async (req, res) => {
   try {
-    const { name, code, description, adminUnitId, adminId } = req.body;
+    const { name, code, description, adminId } = req.body;
+    // adminUnitId can come from URL params or request body
+    const adminUnitId = req.params.adminUnitId || req.body.adminUnitId;
     
     if (!adminUnitId) {
       return res.status(400).json({ error: 'Administrative unit ID is required' });
@@ -493,8 +508,8 @@ exports.createDistrict = async (req, res) => {
     const district = await prisma.district.create({
       data: {
         name,
-        code,
-        description,
+        code: code && code.trim() ? code.trim() : undefined, // Convert empty strings to undefined/null
+        description: description && description.trim() ? description.trim() : undefined,
         adminUnitId,
         adminId: adminId || undefined
       }
@@ -505,6 +520,9 @@ exports.createDistrict = async (req, res) => {
     console.error('Error creating district:', error);
     if (error.code === 'P2003') {
       return res.status(400).json({ error: 'Invalid administrative unit ID' });
+    }
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'A district with this code already exists' });
     }
     res.status(500).json({ error: 'Internal server error' });
   }

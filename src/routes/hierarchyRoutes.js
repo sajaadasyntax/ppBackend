@@ -16,6 +16,7 @@ router.delete('/regions/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), 
 
 // Locality routes
 router.get('/regions/:regionId/localities', hierarchyController.getLocalitiesByRegion);
+router.post('/regions/:regionId/localities', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.createLocality);
 router.get('/localities/:id', hierarchyController.getLocalityById);
 router.post('/localities', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.createLocality);
 router.put('/localities/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.updateLocality);
@@ -23,6 +24,7 @@ router.delete('/localities/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT',
 
 // Administrative Unit routes
 router.get('/localities/:localityId/admin-units', hierarchyController.getAdminUnitsByLocality);
+router.post('/localities/:localityId/admin-units', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.createAdminUnit);
 router.get('/admin-units/:id', hierarchyController.getAdminUnitById);
 router.post('/admin-units', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.createAdminUnit);
 router.put('/admin-units/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.updateAdminUnit);
@@ -30,6 +32,7 @@ router.delete('/admin-units/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT'
 
 // District routes
 router.get('/admin-units/:adminUnitId/districts', hierarchyController.getDistrictsByAdminUnit);
+router.post('/admin-units/:adminUnitId/districts', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.createDistrict);
 router.get('/districts/:id', hierarchyController.getDistrictById);
 router.post('/districts', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.createDistrict);
 router.put('/districts/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.updateDistrict);

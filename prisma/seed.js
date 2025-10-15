@@ -363,6 +363,8 @@ async function createSubscription(userId, planId, regions) {
       startDate,
       endDate,
       status: "active",
+      amount: "100",  // Default subscription amount
+      paymentStatus: "pending",
       // Note: Subscriptions might not need hierarchy targeting like content does
     }
   });
