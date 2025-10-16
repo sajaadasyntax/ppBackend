@@ -13,6 +13,9 @@ const {
 // All routes require authentication
 router.use(authenticate);
 
+// Get all manageable users (root endpoint for backwards compatibility)
+router.get('/', hierarchicalUserController.getManageableUsers);
+
 // Get users that the current admin can manage
 router.get('/users', hierarchicalUserController.getManageableUsers);
 

@@ -116,6 +116,34 @@ async function getAllChatRooms(req, res) {
 }
 
 /**
+ * Admin: Delete a chat room
+ */
+async function deleteChatRoom(req, res) {
+  try {
+    const { id: roomId } = req.params;
+
+    // Check if room exists
+    const room = await prisma.chatRoom.findUnique({
+      where: { id: roomId }
+    });
+
+    if (!room) {
+      return res.status(404).json({ error: 'Chat room not found' });
+    }
+
+    // Delete the chat room (cascade will delete memberships and messages)
+    await prisma.chatRoom.delete({
+      where: { id: roomId }
+    });
+
+    res.json({ message: 'Chat room deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting chat room:', error);
+    res.status(500).json({ error: 'Failed to delete chat room' });
+  }
+}
+
+/**
  * Admin: Add participant to chat room
  */
 async function addParticipant(req, res) {
@@ -394,6 +422,7 @@ async function sendMessage(req, res) {
 module.exports = {
   createChatRoom,
   getAllChatRooms,
+  deleteChatRoom,
   addParticipant,
   removeParticipant,
   getUserChatRooms,

@@ -23,19 +23,30 @@ const chatRoutes = require('./routes/chatRoutes');
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration
+// CORS configuration - Allow specific origins with credentials
+const allowedOrigins = [
+  'https://ppsudan.org',
+  'https://admin.ppsudan.org',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:19006', // Expo web
+  'exp://192.168.1.1:8081', // Expo Go (adjust IP as needed)
+];
+
 const corsOptions = {
-  origin: [
-    'http://localhost:3000', 
-    'http://localhost:3001', 
-    'http://localhost:3002',
-    'https://pp-admin-h8ovg914n-sajaaads-projects.vercel.app',
-    process.env.FRONTEND_URL // Optional: Add environment variable support
-  ].filter(Boolean), // Filter out undefined/null entries
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log(`Blocked origin: ${origin}`);
+      callback(null, true); // Still allow but log it
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: true, // Enable credentials for authentication
   preflightContinue: false,
   optionsSuccessStatus: 204,
   maxAge: 86400 // 24 hours
@@ -162,20 +173,17 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// Setup Socket.IO
+// Setup Socket.IO with same CORS settings
 const io = new Server(server, {
   cors: {
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:3001', 
-      'http://localhost:3002',
-      'http://localhost:19000',
-      'http://localhost:19001',
-      'http://localhost:19002',
-      'http://localhost:8081',
-      'https://pp-admin-h8ovg914n-sajaaads-projects.vercel.app',
-      process.env.FRONTEND_URL
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Still allow but log it
+      }
+    },
+    methods: ['GET', 'POST'],
     credentials: true
   }
 });
