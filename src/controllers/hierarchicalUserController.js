@@ -11,11 +11,8 @@ exports.getManageableUsers = async (req, res) => {
     const adminUser = req.user;
     const users = await HierarchicalUserService.getManageableUsers(adminUser);
     
-    res.json({
-      success: true,
-      data: users,
-      count: users.length
-    });
+    // Return just the array for backwards compatibility with admin panel
+    res.json(users);
   } catch (error) {
     console.error('Error getting manageable users:', error);
     res.status(500).json({ error: 'Internal server error' });
