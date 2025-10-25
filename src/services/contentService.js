@@ -1,6 +1,7 @@
 const prisma = require('../utils/prisma');
 const path = require('path');
 const fs = require('fs');
+const { buildBulletinWhereClause } = require('./multiHierarchyFilterService');
 
 // Helper functions for hierarchical access control
 const getLocalityIdsInRegion = async (regionId) => {
@@ -127,133 +128,44 @@ const togglePublishContent = async (id) => {
   });
 };
 
-// Bulletins
+// Bulletins - Now supports multi-hierarchy filtering
 const getBulletins = async (adminUser = null) => {
   try {
-    // Build where clause based on hierarchical access control
-    let whereClause = { published: true };
+    // Build where clause based on user's active hierarchy
+    const whereClause = await buildBulletinWhereClause(adminUser);
     
-    // Apply hierarchical access control if adminUser is provided
-    if (adminUser) {
-      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
-      
-      console.log("User hierarchy info:", { adminLevel, regionId, localityId, adminUnitId, districtId });
-      
-      switch (adminLevel) {
-        case 'GENERAL_SECRETARIAT':
-        case 'ADMIN':
-          // General Secretariat and Admin can see all bulletins
-          console.log("Admin/General Secretariat user - showing all bulletins");
-          break;
-          
-        default:
-          // For all other users, apply direct ID comparison filtering
-          console.log("Applying direct ID comparison filtering for bulletins");
-          
-          // Start with an empty OR array
-          whereClause.OR = [];
-          
-          // Add conditions based on user's hierarchy level
-          if (regionId) {
-            // Region-level bulletins (where regionId matches AND lower levels are not targeted)
-            whereClause.OR.push({
-              targetRegionId: regionId,
-              AND: [
-                {
-                  OR: [
-                    { targetLocalityId: null },
-                    { targetLocalityId: localityId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add locality-level bulletins only if user has a locality
-          if (localityId) {
-            whereClause.OR.push({
-              targetLocalityId: localityId,
-              AND: [
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add admin unit-level bulletins only if user has an admin unit
-          if (adminUnitId) {
-            whereClause.OR.push({
-              targetAdminUnitId: adminUnitId,
-              AND: [
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add district-level bulletins only if user has a district
-          if (districtId) {
-            whereClause.OR.push({
-              targetDistrictId: districtId
-            });
-          }
-          
-          // If no conditions were added, return no results
-          if (whereClause.OR.length === 0) {
-            whereClause.id = 'none'; // This will return no results
-            console.log("No hierarchy information available for user, returning no bulletins");
-          }
-          
-          console.log("Final filter criteria:", JSON.stringify(whereClause, null, 2));
-      }
-    }
+    console.log("Bulletin filter criteria:", JSON.stringify(whereClause, null, 2));
     
     const bulletins = await prisma.bulletin.findMany({
-        where: whereClause,
-        orderBy: { date: 'desc' },
-        select: {
-          id: true,
-          title: true,
-          content: true,
-          date: true,
-          image: true,
-          targetRegionId: true,
-          targetLocalityId: true,
-          targetAdminUnitId: true,
-          targetDistrictId: true
-        }
-      });
+      where: whereClause,
+      orderBy: { date: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        date: true,
+        image: true,
+        // Original hierarchy fields
+        targetNationalLevelId: true,
+        targetRegionId: true,
+        targetLocalityId: true,
+        targetAdminUnitId: true,
+        targetDistrictId: true,
+        // Expatriate hierarchy fields
+        targetExpatriateRegionId: true,
+        // Sector hierarchy fields
+        targetSectorNationalLevelId: true,
+        targetSectorRegionId: true,
+        targetSectorLocalityId: true,
+        targetSectorAdminUnitId: true,
+        targetSectorDistrictId: true
+      }
+    });
 
-      return bulletins.map(bulletin => ({
-        ...bulletin,
-        date: bulletin.date.toISOString().split('T')[0] // Format date as YYYY-MM-DD
-      }));
+    return bulletins.map(bulletin => ({
+      ...bulletin,
+      date: bulletin.date.toISOString().split('T')[0] // Format date as YYYY-MM-DD
+    }));
   } catch (error) {
     console.error('Error in getBulletins service:', error);
     
@@ -525,112 +437,13 @@ const deleteArchiveDocument = async (id) => {
   }
 };
 
-// Surveys
+// Surveys - Now supports multi-hierarchy filtering
 const getSurveys = async (userId, adminUser = null) => {
   try {
-    // Start with basic filter
-    let whereClause = { published: true };
+    // Build where clause based on user's active hierarchy
+    const whereClause = await buildContentWhereClause(adminUser);
     
-    // Apply hierarchical access control if adminUser is provided
-    if (adminUser) {
-      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
-      
-      console.log("User hierarchy info for surveys:", { adminLevel, regionId, localityId, adminUnitId, districtId });
-      
-      switch (adminLevel) {
-        case 'GENERAL_SECRETARIAT':
-        case 'ADMIN':
-          // General Secretariat and Admin can see all surveys
-          console.log("Admin/General Secretariat user - showing all surveys");
-          break;
-          
-        default:
-          // For all other users, apply direct ID comparison filtering similar to bulletins
-          console.log("Applying hierarchical filtering for surveys");
-          
-          // Start with an empty OR array
-          whereClause.OR = [];
-          
-          // Add conditions based on user's hierarchy level
-          if (regionId) {
-            // Region-level surveys (where regionId matches AND lower levels are not targeted)
-            whereClause.OR.push({
-              targetRegionId: regionId,
-              AND: [
-                {
-                  OR: [
-                    { targetLocalityId: null },
-                    { targetLocalityId: localityId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add locality-level surveys only if user has a locality
-          if (localityId) {
-            whereClause.OR.push({
-              targetLocalityId: localityId,
-              AND: [
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add admin unit-level surveys only if user has an admin unit
-          if (adminUnitId) {
-            whereClause.OR.push({
-              targetAdminUnitId: adminUnitId,
-              AND: [
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add district-level surveys only if user has a district
-          if (districtId) {
-            whereClause.OR.push({
-              targetDistrictId: districtId
-            });
-          }
-          
-          // If no conditions were added, return no results
-          if (whereClause.OR.length === 0) {
-            whereClause.id = 'none'; // This will return no results
-            console.log("No hierarchy information available for user, returning no surveys");
-          }
-          
-          console.log("Final surveys filter criteria:", JSON.stringify(whereClause, null, 2));
-      }
-    }
+    console.log("Survey filter criteria:", JSON.stringify(whereClause, null, 2));
     
     // Fetch surveys with hierarchical filtering
     const surveys = await prisma.survey.findMany({
@@ -664,11 +477,18 @@ const getSurveys = async (userId, adminUser = null) => {
         participants: Math.floor(Math.random() * 100) + 20, // Mock data for now
         type: survey.audience || 'public',
         audience: survey.audience || 'public',
-        // Add hierarchy information
+        // Add all hierarchy information
+        targetNationalLevelId: survey.targetNationalLevelId,
         targetRegionId: survey.targetRegionId,
         targetLocalityId: survey.targetLocalityId,
         targetAdminUnitId: survey.targetAdminUnitId,
-        targetDistrictId: survey.targetDistrictId
+        targetDistrictId: survey.targetDistrictId,
+        targetExpatriateRegionId: survey.targetExpatriateRegionId,
+        targetSectorNationalLevelId: survey.targetSectorNationalLevelId,
+        targetSectorRegionId: survey.targetSectorRegionId,
+        targetSectorLocalityId: survey.targetSectorLocalityId,
+        targetSectorAdminUnitId: survey.targetSectorAdminUnitId,
+        targetSectorDistrictId: survey.targetSectorDistrictId
       };
     });
   } catch (error) {
@@ -1027,109 +847,10 @@ const submitSurveyResponse = async (surveyId, userId, answers) => {
 // Voting
 const getVotingItems = async (userId, adminUser = null) => {
   try {
-    // Build where clause based on hierarchical access control
-    let whereClause = { published: true };
+    // Build where clause based on user's active hierarchy
+    const whereClause = await buildContentWhereClause(adminUser);
     
-    // Apply hierarchical access control if adminUser is provided
-    if (adminUser) {
-      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
-      
-      console.log("User hierarchy info for voting items:", { adminLevel, regionId, localityId, adminUnitId, districtId });
-      
-      switch (adminLevel) {
-        case 'GENERAL_SECRETARIAT':
-        case 'ADMIN':
-          // General Secretariat and Admin can see all voting items
-          console.log("Admin/General Secretariat user - showing all voting items");
-          break;
-          
-        default:
-          // For all other users, apply direct ID comparison filtering similar to bulletins
-          console.log("Applying hierarchical filtering for voting items");
-          
-          // Start with an empty OR array
-          whereClause.OR = [];
-          
-          // Add conditions based on user's hierarchy level
-          if (regionId) {
-            // Region-level voting items (where regionId matches AND lower levels are not targeted)
-            whereClause.OR.push({
-              targetRegionId: regionId,
-              AND: [
-                {
-                  OR: [
-                    { targetLocalityId: null },
-                    { targetLocalityId: localityId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add locality-level voting items only if user has a locality
-          if (localityId) {
-            whereClause.OR.push({
-              targetLocalityId: localityId,
-              AND: [
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add admin unit-level voting items only if user has an admin unit
-          if (adminUnitId) {
-            whereClause.OR.push({
-              targetAdminUnitId: adminUnitId,
-              AND: [
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add district-level voting items only if user has a district
-          if (districtId) {
-            whereClause.OR.push({
-              targetDistrictId: districtId
-            });
-          }
-          
-          // If no conditions were added, return no results
-          if (whereClause.OR.length === 0) {
-            whereClause.id = 'none'; // This will return no results
-            console.log("No hierarchy information available for user, returning no voting items");
-          }
-          
-          console.log("Final voting items filter criteria:", JSON.stringify(whereClause, null, 2));
-      }
-    }
+    console.log("Voting items filter criteria:", JSON.stringify(whereClause, null, 2));
     
     // Fetch voting items with filtering
     const votingItems = await prisma.votingItem.findMany({
@@ -1218,11 +939,18 @@ const getVotingItems = async (userId, adminUser = null) => {
           totalVotes,
           results,
           status,
-          // Add hierarchy information
+          // Add all hierarchy information
+          targetNationalLevelId: item.targetNationalLevelId,
           targetRegionId: item.targetRegionId,
           targetLocalityId: item.targetLocalityId,
           targetAdminUnitId: item.targetAdminUnitId,
-          targetDistrictId: item.targetDistrictId
+          targetDistrictId: item.targetDistrictId,
+          targetExpatriateRegionId: item.targetExpatriateRegionId,
+          targetSectorNationalLevelId: item.targetSectorNationalLevelId,
+          targetSectorRegionId: item.targetSectorRegionId,
+          targetSectorLocalityId: item.targetSectorLocalityId,
+          targetSectorAdminUnitId: item.targetSectorAdminUnitId,
+          targetSectorDistrictId: item.targetSectorDistrictId
         };
       })
     );
@@ -1543,67 +1271,13 @@ const getUserReports = async (userId) => {
 
 const getAllReports = async (status, adminUser = null) => {
   try {
-    // Start with status filter if provided
-    const whereClause = status ? { status } : {};
+    // Build where clause based on user's active hierarchy
+    let baseWhereClause = await buildContentWhereClause(adminUser);
     
-    // Apply hierarchical access control if adminUser is provided
-    if (adminUser) {
-      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
-      
-      console.log("User hierarchy info for reports:", { adminLevel, regionId, localityId, adminUnitId, districtId });
-      
-      switch (adminLevel) {
-        case 'GENERAL_SECRETARIAT':
-        case 'ADMIN':
-          // General Secretariat and Admin can see all reports
-          console.log("Admin/General Secretariat user - showing all reports");
-          break;
-          
-        default:
-          // For all other users, apply direct ID comparison filtering similar to bulletins
-          console.log("Applying hierarchical filtering for reports");
-          
-          // We need to filter reports based on their target hierarchy
-          whereClause.OR = [];
-          
-          // Add conditions based on user's hierarchy level
-          if (regionId) {
-            // Region-level users - show reports targeted to their region or below
-            whereClause.OR.push({
-              targetRegionId: regionId
-            });
-          }
-          
-          // Add locality-level filter only if user has a locality
-          if (localityId) {
-            whereClause.OR.push({
-              targetLocalityId: localityId
-            });
-          }
-          
-          // Add admin unit-level filter only if user has an admin unit
-          if (adminUnitId) {
-            whereClause.OR.push({
-              targetAdminUnitId: adminUnitId
-            });
-          }
-          
-          // Add district-level filter only if user has a district
-          if (districtId) {
-            whereClause.OR.push({
-              targetDistrictId: districtId
-            });
-          }
-          
-          // If no conditions were added, return no results
-          if (whereClause.OR.length === 0) {
-            whereClause.id = 'none'; // This will return no results
-            console.log("No hierarchy information available for user, returning no reports");
-          }
-          
-          console.log("Final report filter criteria:", JSON.stringify(whereClause, null, 2));
-      }
-    }
+    // Add status filter if provided
+    const whereClause = status ? { ...baseWhereClause, status } : baseWhereClause;
+    
+    console.log("Reports filter criteria:", JSON.stringify(whereClause, null, 2));
     
     const reports = await prisma.report.findMany({
       where: whereClause,
@@ -1620,6 +1294,8 @@ const getAllReports = async (status, adminUser = null) => {
             localityId: true,
             adminUnitId: true,
             districtId: true,
+            expatriateRegionId: true,
+            sectorRegionId: true,
             profile: {
               select: {
                 firstName: true,
@@ -1647,11 +1323,13 @@ const getAllReports = async (status, adminUser = null) => {
         report.user.email,
       createdById: report.userId,
       submittedAt: report.createdAt.toISOString(),
-      // Add hierarchy information
+      // Add all hierarchy information (from user who created the report)
       regionId: report.user.regionId,
       localityId: report.user.localityId,
       adminUnitId: report.user.adminUnitId,
-      districtId: report.user.districtId
+      districtId: report.user.districtId,
+      expatriateRegionId: report.user.expatriateRegionId,
+      sectorRegionId: report.user.sectorRegionId
     }));
   } catch (error) {
     console.error('Error in getAllReports service:', error);

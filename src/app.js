@@ -13,6 +13,8 @@ const hierarchyRoutes = require('./routes/hierarchyRoutes');
 const adminHierarchyRoutes = require('./routes/adminHierarchyRoutes');
 const hierarchyManagementRoutes = require('./routes/hierarchyManagementRoutes');
 const hierarchicalUserRoutes = require('./routes/hierarchicalUserRoutes');
+const expatriateHierarchyRoutes = require('./routes/expatriateHierarchyRoutes');
+const sectorHierarchyRoutes = require('./routes/sectorHierarchyRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const publicRoutes = require('./routes/publicRoutes');
@@ -127,6 +129,8 @@ app.use('/api/admin/hierarchy', adminHierarchyRoutes);
 app.use('/api/hierarchy-management', hierarchyManagementRoutes);
 app.use('/api/hierarchical', hierarchicalUserRoutes);
 app.use('/api/hierarchical-users', hierarchicalUserRoutes); // Alias for frontend compatibility
+app.use('/api/expatriate-hierarchy', expatriateHierarchyRoutes);
+app.use('/api/sector-hierarchy', sectorHierarchyRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/public', publicRoutes);

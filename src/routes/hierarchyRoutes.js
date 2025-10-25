@@ -7,6 +7,13 @@ const router = express.Router();
 // Middleware to ensure only authenticated users can access these routes
 router.use(authenticate);
 
+// National Level routes
+router.get('/national-levels', hierarchyController.getNationalLevels);
+router.get('/national-levels/:id', hierarchyController.getNationalLevelById);
+router.post('/national-levels', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.createNationalLevel);
+router.put('/national-levels/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.updateNationalLevel);
+router.delete('/national-levels/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.deleteNationalLevel);
+
 // Region routes
 router.get('/regions', hierarchyController.getRegions);
 router.get('/regions/:id', hierarchyController.getRegionById);

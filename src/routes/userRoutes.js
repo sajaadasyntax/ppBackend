@@ -14,6 +14,10 @@ router.use(authenticate);
 // User routes - requires authentication
 router.get('/profile', userController.getUserProfile);
 
+// Active hierarchy management routes
+router.put('/active-hierarchy', userController.updateActiveHierarchy);
+router.get('/hierarchy-memberships', userController.getUserHierarchyMemberships);
+
 // Hierarchy selection routes for user creation
 router.get('/hierarchy/regions', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.getRegionsForUserCreation);
 router.get('/hierarchy/regions/:regionId/localities', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.getLocalitiesForUserCreation);

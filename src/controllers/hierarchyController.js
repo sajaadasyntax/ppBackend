@@ -647,3 +647,120 @@ exports.getUsersByHierarchyLevel = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// ===== NATIONAL LEVEL FUNCTIONS =====
+
+// Get all national levels
+exports.getNationalLevels = async (req, res) => {
+  try {
+    const nationalLevels = await prisma.nationalLevel.findMany({
+      where: { active: true },
+      include: {
+        _count: {
+          select: { regions: true, users: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+    
+    res.json(nationalLevels);
+  } catch (error) {
+    console.error('Error getting national levels:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get national level by ID
+exports.getNationalLevelById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const nationalLevel = await prisma.nationalLevel.findUnique({
+      where: { id },
+      include: {
+        regions: {
+          where: { active: true },
+          orderBy: { name: 'asc' }
+        },
+        users: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            adminLevel: true,
+            profile: true
+          }
+        }
+      }
+    });
+    
+    if (!nationalLevel) {
+      return res.status(404).json({ error: 'National level not found' });
+    }
+    
+    res.json(nationalLevel);
+  } catch (error) {
+    console.error('Error getting national level by ID:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Create new national level
+exports.createNationalLevel = async (req, res) => {
+  try {
+    const { name, code, description, active } = req.body;
+    
+    const nationalLevel = await prisma.nationalLevel.create({
+      data: {
+        name,
+        code,
+        description,
+        active: active !== undefined ? active : true
+      }
+    });
+    
+    res.status(201).json(nationalLevel);
+  } catch (error) {
+    console.error('Error creating national level:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Update national level
+exports.updateNationalLevel = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, code, description, active } = req.body;
+    
+    const nationalLevel = await prisma.nationalLevel.update({
+      where: { id },
+      data: {
+        name,
+        code,
+        description,
+        active
+      }
+    });
+    
+    res.json(nationalLevel);
+  } catch (error) {
+    console.error('Error updating national level:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Delete national level
+exports.deleteNationalLevel = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    await prisma.nationalLevel.delete({
+      where: { id }
+    });
+    
+    res.json({ message: 'National level deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting national level:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

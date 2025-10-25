@@ -898,4 +898,102 @@ exports.getUserHierarchyPath = async (req, res) => {
     console.error('Get user hierarchy path error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+};
+
+/**
+ * Update user's active hierarchy preference
+ */
+exports.updateActiveHierarchy = async (req, res) => {
+  try {
+    const userId = req.user.id; // Get from authenticated user
+    const { activeHierarchy } = req.body;
+    
+    // Validate activeHierarchy value
+    const validHierarchies = ['ORIGINAL', 'EXPATRIATE', 'SECTOR'];
+    if (!validHierarchies.includes(activeHierarchy)) {
+      return res.status(400).json({ 
+        error: 'Invalid hierarchy type. Must be ORIGINAL, EXPATRIATE, or SECTOR' 
+      });
+    }
+    
+    // Update user's active hierarchy
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { activeHierarchy },
+      select: {
+        id: true,
+        email: true,
+        mobileNumber: true,
+        activeHierarchy: true,
+        profile: true
+      }
+    });
+    
+    res.json({
+      message: 'Active hierarchy updated successfully',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Update active hierarchy error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Get user's current hierarchy memberships
+ */
+exports.getUserHierarchyMemberships = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        activeHierarchy: true,
+        // Original hierarchy
+        nationalLevel: { select: { id: true, name: true, code: true } },
+        region: { select: { id: true, name: true, code: true } },
+        locality: { select: { id: true, name: true, code: true } },
+        adminUnit: { select: { id: true, name: true, code: true } },
+        district: { select: { id: true, name: true, code: true } },
+        // Expatriate hierarchy
+        expatriateRegion: { select: { id: true, name: true, code: true } },
+        // Sector hierarchy
+        sectorNationalLevel: { select: { id: true, name: true, code: true, sectorType: true } },
+        sectorRegion: { select: { id: true, name: true, code: true, sectorType: true } },
+        sectorLocality: { select: { id: true, name: true, code: true, sectorType: true } },
+        sectorAdminUnit: { select: { id: true, name: true, code: true, sectorType: true } },
+        sectorDistrict: { select: { id: true, name: true, code: true, sectorType: true } }
+      }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({
+      activeHierarchy: user.activeHierarchy,
+      originalHierarchy: {
+        nationalLevel: user.nationalLevel,
+        region: user.region,
+        locality: user.locality,
+        adminUnit: user.adminUnit,
+        district: user.district
+      },
+      expatriateHierarchy: {
+        region: user.expatriateRegion
+      },
+      sectorHierarchy: {
+        nationalLevel: user.sectorNationalLevel,
+        region: user.sectorRegion,
+        locality: user.sectorLocality,
+        adminUnit: user.sectorAdminUnit,
+        district: user.sectorDistrict
+      }
+    });
+  } catch (error) {
+    console.error('Get user hierarchy memberships error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 }; 
