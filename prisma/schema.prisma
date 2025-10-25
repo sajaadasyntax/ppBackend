@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,484 +7,328 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Administrative level enum for user roles hierarchy
-// Note: PostgreSQL supports enums, we don't need to use strings like before
-enum AdminLevel {
-  GENERAL_SECRETARIAT
-  NATIONAL_LEVEL        // المستوى القومي - above regions
-  REGION
-  LOCALITY
-  ADMIN_UNIT
-  DISTRICT
-  USER
-  ADMIN
-  EXPATRIATE_GENERAL    // General admin for expatriates hierarchy
-  EXPATRIATE_REGION     // Specific expatriate region admin
-}
-
-// Sector type enum for القطاعات hierarchy
-enum SectorType {
-  SOCIAL        // الاجتماعي
-  ECONOMIC      // الاقتصادي
-  ORGANIZATIONAL // التنظيمي
-  POLITICAL     // السياسي
-}
-
-// Active hierarchy preference for users
-enum ActiveHierarchy {
-  ORIGINAL      // Original geographic hierarchy
-  EXPATRIATE    // Expatriate regions hierarchy
-  SECTOR        // Sectors hierarchy
-}
-
-// ===== ORIGINAL HIERARCHY MODELS =====
-
-// NationalLevel model represents المستوى القومي level (top level above regions)
 model NationalLevel {
-  id          String      @id @default(uuid())
+  id          String             @id @default(uuid())
   name        String
-  code        String?     @unique
+  code        String?            @unique
   description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Relationships
-  regions     Region[]    // Regions under this national level
-  users       User[]      // Users directly associated with this national level
-  
-  // Admin relationship
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   adminId     String?
-  admin       User?       @relation("NationalLevelAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting this national level
-  bulletins     Bulletin[]     // Bulletins targeted to national level
-  surveys       Survey[]       // Surveys targeted to national level
-  votingItems   VotingItem[]   // Voting items targeted to national level
-  reports       Report[]       // Reports targeted to national level
-  plans         SubscriptionPlan[] @relation("NationalLevelPlans")
+  bulletins   Bulletin[]
+  admin       User?              @relation("NationalLevelAdmin", fields: [adminId], references: [id])
+  regions     Region[]
+  reports     Report[]
+  plans       SubscriptionPlan[] @relation("NationalLevelPlans")
+  surveys     Survey[]
+  users       User[]
+  votingItems VotingItem[]
 }
 
-// Region model represents الولاية level
 model Region {
-  id          String      @id @default(uuid())
-  name        String
-  code        String?     @unique
-  description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent national level (optional for backward compatibility)
+  id              String             @id @default(uuid())
+  name            String
+  code            String?            @unique
+  description     String?
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  adminId         String?
   nationalLevelId String?
-  nationalLevel   NationalLevel? @relation(fields: [nationalLevelId], references: [id])
-  
-  // Relationships
-  users       User[]      // Users directly associated with this region
-  localities  Locality[]  // Localities in this region
-  
-  // Admin relationship
-  adminId     String?
-  admin       User?       @relation("RegionAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting this region
-  bulletins     Bulletin[]     // Bulletins targeted to this region
-  surveys       Survey[]       // Surveys targeted to this region
-  votingItems   VotingItem[]   // Voting items targeted to this region
-  reports       Report[]       // Reports targeted to this region
-  plans         SubscriptionPlan[] @relation("RegionPlans")  // Subscription plans for this region
+  bulletins       Bulletin[]
+  localities      Locality[]
+  admin           User?              @relation("RegionAdmin", fields: [adminId], references: [id])
+  nationalLevel   NationalLevel?     @relation(fields: [nationalLevelId], references: [id])
+  reports         Report[]
+  plans           SubscriptionPlan[] @relation("RegionPlans")
+  surveys         Survey[]
+  users           User[]
+  votingItems     VotingItem[]
 }
 
-// Locality model represents المحلية level
 model Locality {
-  id          String      @id @default(uuid())
+  id          String             @id @default(uuid())
   name        String
-  code        String?     @unique
+  code        String?            @unique
   description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent region
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   regionId    String
-  region      Region      @relation(fields: [regionId], references: [id])
-  
-  // Relationships
-  users       User[]      // Users directly associated with this locality
-  adminUnits  AdminUnit[] // Administrative units in this locality
-  
-  // Admin relationship
   adminId     String?
-  admin       User?       @relation("LocalityAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting this locality
-  bulletins     Bulletin[]     // Bulletins targeted to this locality
-  surveys       Survey[]       // Surveys targeted to this locality
-  votingItems   VotingItem[]   // Voting items targeted to this locality
-  reports       Report[]       // Reports targeted to this locality
-  plans         SubscriptionPlan[] @relation("LocalityPlans")  // Subscription plans for this locality
+  adminUnits  AdminUnit[]
+  bulletins   Bulletin[]
+  admin       User?              @relation("LocalityAdmin", fields: [adminId], references: [id])
+  region      Region             @relation(fields: [regionId], references: [id])
+  reports     Report[]
+  plans       SubscriptionPlan[] @relation("LocalityPlans")
+  surveys     Survey[]
+  users       User[]
+  votingItems VotingItem[]
 }
 
-// AdminUnit model represents الوحدة الادارية level
 model AdminUnit {
-  id          String      @id @default(uuid())
+  id          String             @id @default(uuid())
   name        String
-  code        String?     @unique
+  code        String?            @unique
   description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent locality
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   localityId  String
-  locality    Locality    @relation(fields: [localityId], references: [id])
-  
-  // Relationships
-  users       User[]      // Users directly associated with this admin unit
-  districts   District[]  // Districts in this admin unit
-  
-  // Admin relationship
   adminId     String?
-  admin       User?       @relation("AdminUnitAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting this admin unit
-  bulletins     Bulletin[]     // Bulletins targeted to this admin unit
-  surveys       Survey[]       // Surveys targeted to this admin unit
-  votingItems   VotingItem[]   // Voting items targeted to this admin unit
-  reports       Report[]       // Reports targeted to this admin unit
-  plans         SubscriptionPlan[] @relation("AdminUnitPlans")  // Subscription plans for this admin unit
+  admin       User?              @relation("AdminUnitAdmin", fields: [adminId], references: [id])
+  locality    Locality           @relation(fields: [localityId], references: [id])
+  bulletins   Bulletin[]
+  districts   District[]
+  reports     Report[]
+  plans       SubscriptionPlan[] @relation("AdminUnitPlans")
+  surveys     Survey[]
+  users       User[]
+  votingItems VotingItem[]
 }
 
-// District model represents الحي level
 model District {
-  id          String      @id @default(uuid())
+  id          String             @id @default(uuid())
   name        String
-  code        String?     @unique
+  code        String?            @unique
   description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent administrative unit
+  active      Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   adminUnitId String
-  adminUnit   AdminUnit   @relation(fields: [adminUnitId], references: [id])
-  
-  // Relationships
-  users       User[]      // Users directly associated with this district
-  
-  // Admin relationship
   adminId     String?
-  admin       User?       @relation("DistrictAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting this district
-  bulletins     Bulletin[]     // Bulletins targeted to this district
-  surveys       Survey[]       // Surveys targeted to this district
-  votingItems   VotingItem[]   // Voting items targeted to this district
-  reports       Report[]       // Reports targeted to this district
-  plans         SubscriptionPlan[] @relation("DistrictPlans")  // Subscription plans for this district
+  bulletins   Bulletin[]
+  admin       User?              @relation("DistrictAdmin", fields: [adminId], references: [id])
+  adminUnit   AdminUnit          @relation(fields: [adminUnitId], references: [id])
+  reports     Report[]
+  plans       SubscriptionPlan[] @relation("DistrictPlans")
+  surveys     Survey[]
+  users       User[]
+  votingItems VotingItem[]
 }
 
-// ===== EXPATRIATE HIERARCHY MODELS =====
-
-// ExpatriateRegion model represents قطاع المغتربين
 model ExpatriateRegion {
-  id          String      @id @default(uuid())
-  name        String      @unique
-  code        String?     @unique
-  description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Relationships
-  users       User[]      // Users in this expatriate region
-  
-  // Sector subdivisions
-  sectorNationalLevels SectorNationalLevel[]
-  sectorRegions        SectorRegion[]
-  sectorLocalities     SectorLocality[]
+  id                   String                @id @default(uuid())
+  name                 String                @unique
+  code                 String?               @unique
+  description          String?
+  active               Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  adminId              String?
+  bulletins            Bulletin[]            @relation("ExpatriateRegionBulletins")
+  admin                User?                 @relation("ExpatriateRegionAdmin", fields: [adminId], references: [id])
+  reports              Report[]              @relation("ExpatriateRegionReports")
   sectorAdminUnits     SectorAdminUnit[]
   sectorDistricts      SectorDistrict[]
-  
-  // Admin relationship
-  adminId     String?
-  admin       User?       @relation("ExpatriateRegionAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting this expatriate region
-  bulletins     Bulletin[]     @relation("ExpatriateRegionBulletins")
-  surveys       Survey[]       @relation("ExpatriateRegionSurveys")
-  votingItems   VotingItem[]   @relation("ExpatriateRegionVotingItems")
-  reports       Report[]       @relation("ExpatriateRegionReports")
-  plans         SubscriptionPlan[] @relation("ExpatriateRegionPlans")
+  sectorLocalities     SectorLocality[]
+  sectorNationalLevels SectorNationalLevel[]
+  sectorRegions        SectorRegion[]
+  plans                SubscriptionPlan[]    @relation("ExpatriateRegionPlans")
+  surveys              Survey[]              @relation("ExpatriateRegionSurveys")
+  users                User[]
+  votingItems          VotingItem[]          @relation("ExpatriateRegionVotingItems")
 }
 
-// ===== SECTOR HIERARCHY MODELS =====
-
-// SectorNationalLevel represents المستوى القومي in القطاعات hierarchy
 model SectorNationalLevel {
-  id          String      @id @default(uuid())
-  name        String
-  code        String?     @unique
-  sectorType  SectorType  // الاجتماعي، الاقتصادي، التنظيمي، السياسي
-  description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Link to expatriate region (optional - can exist independently or under expatriate)
+  id                 String             @id @default(uuid())
+  name               String
+  code               String?            @unique
+  sectorType         SectorType
+  description        String?
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
   expatriateRegionId String?
-  expatriateRegion   ExpatriateRegion? @relation(fields: [expatriateRegionId], references: [id])
-  
-  // Relationships
-  sectorRegions SectorRegion[] // Sector regions under this national level
-  users         User[]         // Users in this sector national level
-  
-  // Admin relationship
-  adminId     String?
-  admin       User?       @relation("SectorNationalLevelAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting
-  bulletins     Bulletin[]     @relation("SectorNationalLevelBulletins")
-  surveys       Survey[]       @relation("SectorNationalLevelSurveys")
-  votingItems   VotingItem[]   @relation("SectorNationalLevelVotingItems")
-  reports       Report[]       @relation("SectorNationalLevelReports")
-  plans         SubscriptionPlan[] @relation("SectorNationalLevelPlans")
+  adminId            String?
+  bulletins          Bulletin[]         @relation("SectorNationalLevelBulletins")
+  reports            Report[]           @relation("SectorNationalLevelReports")
+  admin              User?              @relation("SectorNationalLevelAdmin", fields: [adminId], references: [id])
+  expatriateRegion   ExpatriateRegion?  @relation(fields: [expatriateRegionId], references: [id])
+  sectorRegions      SectorRegion[]
+  plans              SubscriptionPlan[] @relation("SectorNationalLevelPlans")
+  surveys            Survey[]           @relation("SectorNationalLevelSurveys")
+  users              User[]
+  votingItems        VotingItem[]       @relation("SectorNationalLevelVotingItems")
 }
 
-// SectorRegion represents الولاية in القطاعات hierarchy
 model SectorRegion {
-  id          String      @id @default(uuid())
-  name        String
-  code        String?     @unique
-  sectorType  SectorType  // الاجتماعي، الاقتصادي، التنظيمي، السياسي
-  description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent sector national level
+  id                    String               @id @default(uuid())
+  name                  String
+  code                  String?              @unique
+  sectorType            SectorType
+  description           String?
+  active                Boolean              @default(true)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
   sectorNationalLevelId String?
+  expatriateRegionId    String?
+  adminId               String?
+  bulletins             Bulletin[]           @relation("SectorRegionBulletins")
+  reports               Report[]             @relation("SectorRegionReports")
+  sectorLocalities      SectorLocality[]
+  admin                 User?                @relation("SectorRegionAdmin", fields: [adminId], references: [id])
+  expatriateRegion      ExpatriateRegion?    @relation(fields: [expatriateRegionId], references: [id])
   sectorNationalLevel   SectorNationalLevel? @relation(fields: [sectorNationalLevelId], references: [id])
-  
-  // Link to expatriate region (optional)
-  expatriateRegionId String?
-  expatriateRegion   ExpatriateRegion? @relation(fields: [expatriateRegionId], references: [id])
-  
-  // Relationships
-  sectorLocalities SectorLocality[] // Sector localities under this region
-  users            User[]           // Users in this sector region
-  
-  // Admin relationship
-  adminId     String?
-  admin       User?       @relation("SectorRegionAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting
-  bulletins     Bulletin[]     @relation("SectorRegionBulletins")
-  surveys       Survey[]       @relation("SectorRegionSurveys")
-  votingItems   VotingItem[]   @relation("SectorRegionVotingItems")
-  reports       Report[]       @relation("SectorRegionReports")
-  plans         SubscriptionPlan[] @relation("SectorRegionPlans")
+  plans                 SubscriptionPlan[]   @relation("SectorRegionPlans")
+  surveys               Survey[]             @relation("SectorRegionSurveys")
+  users                 User[]
+  votingItems           VotingItem[]         @relation("SectorRegionVotingItems")
 }
 
-// SectorLocality represents المحلية in القطاعات hierarchy
 model SectorLocality {
-  id          String      @id @default(uuid())
-  name        String
-  code        String?     @unique
-  sectorType  SectorType  // الاجتماعي، الاقتصادي، التنظيمي، السياسي
-  description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent sector region
-  sectorRegionId String?
-  sectorRegion   SectorRegion? @relation(fields: [sectorRegionId], references: [id])
-  
-  // Link to expatriate region (optional)
+  id                 String             @id @default(uuid())
+  name               String
+  code               String?            @unique
+  sectorType         SectorType
+  description        String?
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sectorRegionId     String?
   expatriateRegionId String?
-  expatriateRegion   ExpatriateRegion? @relation(fields: [expatriateRegionId], references: [id])
-  
-  // Relationships
-  sectorAdminUnits SectorAdminUnit[] // Sector admin units under this locality
-  users            User[]            // Users in this sector locality
-  
-  // Admin relationship
-  adminId     String?
-  admin       User?       @relation("SectorLocalityAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting
-  bulletins     Bulletin[]     @relation("SectorLocalityBulletins")
-  surveys       Survey[]       @relation("SectorLocalitySurveys")
-  votingItems   VotingItem[]   @relation("SectorLocalityVotingItems")
-  reports       Report[]       @relation("SectorLocalityReports")
-  plans         SubscriptionPlan[] @relation("SectorLocalityPlans")
+  adminId            String?
+  bulletins          Bulletin[]         @relation("SectorLocalityBulletins")
+  reports            Report[]           @relation("SectorLocalityReports")
+  sectorAdminUnits   SectorAdminUnit[]
+  admin              User?              @relation("SectorLocalityAdmin", fields: [adminId], references: [id])
+  expatriateRegion   ExpatriateRegion?  @relation(fields: [expatriateRegionId], references: [id])
+  sectorRegion       SectorRegion?      @relation(fields: [sectorRegionId], references: [id])
+  plans              SubscriptionPlan[] @relation("SectorLocalityPlans")
+  surveys            Survey[]           @relation("SectorLocalitySurveys")
+  users              User[]
+  votingItems        VotingItem[]       @relation("SectorLocalityVotingItems")
 }
 
-// SectorAdminUnit represents الوحدة الادارية in القطاعات hierarchy
 model SectorAdminUnit {
-  id          String      @id @default(uuid())
-  name        String
-  code        String?     @unique
-  sectorType  SectorType  // الاجتماعي، الاقتصادي، التنظيمي، السياسي
-  description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent sector locality
-  sectorLocalityId String?
-  sectorLocality   SectorLocality? @relation(fields: [sectorLocalityId], references: [id])
-  
-  // Link to expatriate region (optional)
+  id                 String             @id @default(uuid())
+  name               String
+  code               String?            @unique
+  sectorType         SectorType
+  description        String?
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sectorLocalityId   String?
   expatriateRegionId String?
-  expatriateRegion   ExpatriateRegion? @relation(fields: [expatriateRegionId], references: [id])
-  
-  // Relationships
-  sectorDistricts SectorDistrict[] // Sector districts under this admin unit
-  users           User[]           // Users in this sector admin unit
-  
-  // Admin relationship
-  adminId     String?
-  admin       User?       @relation("SectorAdminUnitAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting
-  bulletins     Bulletin[]     @relation("SectorAdminUnitBulletins")
-  surveys       Survey[]       @relation("SectorAdminUnitSurveys")
-  votingItems   VotingItem[]   @relation("SectorAdminUnitVotingItems")
-  reports       Report[]       @relation("SectorAdminUnitReports")
-  plans         SubscriptionPlan[] @relation("SectorAdminUnitPlans")
+  adminId            String?
+  bulletins          Bulletin[]         @relation("SectorAdminUnitBulletins")
+  reports            Report[]           @relation("SectorAdminUnitReports")
+  admin              User?              @relation("SectorAdminUnitAdmin", fields: [adminId], references: [id])
+  expatriateRegion   ExpatriateRegion?  @relation(fields: [expatriateRegionId], references: [id])
+  sectorLocality     SectorLocality?    @relation(fields: [sectorLocalityId], references: [id])
+  sectorDistricts    SectorDistrict[]
+  plans              SubscriptionPlan[] @relation("SectorAdminUnitPlans")
+  surveys            Survey[]           @relation("SectorAdminUnitSurveys")
+  users              User[]
+  votingItems        VotingItem[]       @relation("SectorAdminUnitVotingItems")
 }
 
-// SectorDistrict represents الحي in القطاعات hierarchy
 model SectorDistrict {
-  id          String      @id @default(uuid())
-  name        String
-  code        String?     @unique
-  sectorType  SectorType  // الاجتماعي، الاقتصادي، التنظيمي، السياسي
-  description String?
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Parent sector admin unit
-  sectorAdminUnitId String?
-  sectorAdminUnit   SectorAdminUnit? @relation(fields: [sectorAdminUnitId], references: [id])
-  
-  // Link to expatriate region (optional)
+  id                 String             @id @default(uuid())
+  name               String
+  code               String?            @unique
+  sectorType         SectorType
+  description        String?
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sectorAdminUnitId  String?
   expatriateRegionId String?
-  expatriateRegion   ExpatriateRegion? @relation(fields: [expatriateRegionId], references: [id])
-  
-  // Relationships
-  users User[] // Users in this sector district
-  
-  // Admin relationship
-  adminId     String?
-  admin       User?       @relation("SectorDistrictAdmin", fields: [adminId], references: [id])
-  
-  // Content targeting
-  bulletins     Bulletin[]     @relation("SectorDistrictBulletins")
-  surveys       Survey[]       @relation("SectorDistrictSurveys")
-  votingItems   VotingItem[]   @relation("SectorDistrictVotingItems")
-  reports       Report[]       @relation("SectorDistrictReports")
-  plans         SubscriptionPlan[] @relation("SectorDistrictPlans")
+  adminId            String?
+  bulletins          Bulletin[]         @relation("SectorDistrictBulletins")
+  reports            Report[]           @relation("SectorDistrictReports")
+  admin              User?              @relation("SectorDistrictAdmin", fields: [adminId], references: [id])
+  expatriateRegion   ExpatriateRegion?  @relation(fields: [expatriateRegionId], references: [id])
+  sectorAdminUnit    SectorAdminUnit?   @relation(fields: [sectorAdminUnitId], references: [id])
+  plans              SubscriptionPlan[] @relation("SectorDistrictPlans")
+  surveys            Survey[]           @relation("SectorDistrictSurveys")
+  users              User[]
+  votingItems        VotingItem[]       @relation("SectorDistrictVotingItems")
 }
 
 model User {
-  id             String         @id @default(uuid())
-  email          String?        @unique
-  mobileNumber   String         @unique // E.164 format: +249XXXXXXXXX
-  password       String
-  role           String         @default("USER") // For backward compatibility
-  adminLevel     AdminLevel     @default(USER)
-  activeHierarchy ActiveHierarchy @default(ORIGINAL) // User's preferred hierarchy view
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  profile        Profile?
-  memberDetails  MemberDetails?
-  refreshTokens  RefreshToken[]
-  surveys        SurveyResponse[]
-  votes          Vote[]
-  reports        Report[]
-  votingItems    VotingItem[]   // Created voting items
-  subscriptions  Subscription[]
-  createdPlans   SubscriptionPlan[] @relation("PlanCreator")
-  approvedPlans  SubscriptionPlan[] @relation("PlanApprover")
-  
-  // ===== ORIGINAL HIERARCHY REFERENCES =====
-  nationalLevelId String?        // المستوى القومي
-  nationalLevel   NationalLevel? @relation(fields: [nationalLevelId], references: [id])
-  regionId       String?        // الولاية
-  region         Region?        @relation(fields: [regionId], references: [id])
-  localityId     String?        // المحلية
-  locality       Locality?      @relation(fields: [localityId], references: [id])
-  adminUnitId    String?        // الوحدة الادارية
-  adminUnit      AdminUnit?     @relation(fields: [adminUnitId], references: [id])
-  districtId     String?        // الحي
-  district       District?      @relation(fields: [districtId], references: [id])
-  
-  // ===== EXPATRIATE HIERARCHY REFERENCES =====
-  expatriateRegionId String?           // قطاع المغتربين
-  expatriateRegion   ExpatriateRegion? @relation(fields: [expatriateRegionId], references: [id])
-  
-  // ===== SECTOR HIERARCHY REFERENCES =====
-  sectorNationalLevelId String?              // المستوى القومي (قطاع)
-  sectorNationalLevel   SectorNationalLevel? @relation(fields: [sectorNationalLevelId], references: [id])
-  sectorRegionId        String?              // الولاية (قطاع)
-  sectorRegion          SectorRegion?        @relation(fields: [sectorRegionId], references: [id])
-  sectorLocalityId      String?              // المحلية (قطاع)
-  sectorLocality        SectorLocality?      @relation(fields: [sectorLocalityId], references: [id])
-  sectorAdminUnitId     String?              // الوحدة الادارية (قطاع)
-  sectorAdminUnit       SectorAdminUnit?     @relation(fields: [sectorAdminUnitId], references: [id])
-  sectorDistrictId      String?              // الحي (قطاع)
-  sectorDistrict        SectorDistrict?      @relation(fields: [sectorDistrictId], references: [id])
-  
-  // ===== MANAGED HIERARCHIES (for admins) =====
-  // Original hierarchy
-  managedNationalLevels NationalLevel[]  @relation("NationalLevelAdmin")
-  managedRegions        Region[]         @relation("RegionAdmin")
-  managedLocalities     Locality[]       @relation("LocalityAdmin")
-  managedAdminUnits     AdminUnit[]      @relation("AdminUnitAdmin")
-  managedDistricts      District[]       @relation("DistrictAdmin")
-  
-  // Expatriate hierarchy
-  managedExpatriateRegions ExpatriateRegion[] @relation("ExpatriateRegionAdmin")
-  
-  // Sector hierarchy
-  managedSectorNationalLevels SectorNationalLevel[] @relation("SectorNationalLevelAdmin")
-  managedSectorRegions        SectorRegion[]        @relation("SectorRegionAdmin")
-  managedSectorLocalities     SectorLocality[]      @relation("SectorLocalityAdmin")
+  id                          String                @id @default(uuid())
+  email                       String?               @unique
+  mobileNumber                String                @unique
+  password                    String
+  role                        String                @default("USER")
+  adminLevel                  AdminLevel            @default(USER)
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  regionId                    String?
+  localityId                  String?
+  adminUnitId                 String?
+  districtId                  String?
+  activeHierarchy             ActiveHierarchy       @default(ORIGINAL)
+  expatriateRegionId          String?
+  nationalLevelId             String?
+  sectorAdminUnitId           String?
+  sectorDistrictId            String?
+  sectorLocalityId            String?
+  sectorNationalLevelId       String?
+  sectorRegionId              String?
+  managedAdminUnits           AdminUnit[]           @relation("AdminUnitAdmin")
+  chatMemberships             ChatMembership[]
+  sentMessages                ChatMessage[]
+  createdChatRooms            ChatRoom[]            @relation("ChatRoomCreator")
+  managedDistricts            District[]            @relation("DistrictAdmin")
+  managedExpatriateRegions    ExpatriateRegion[]    @relation("ExpatriateRegionAdmin")
+  managedLocalities           Locality[]            @relation("LocalityAdmin")
+  memberDetails               MemberDetails?
+  managedNationalLevels       NationalLevel[]       @relation("NationalLevelAdmin")
+  profile                     Profile?
+  refreshTokens               RefreshToken[]
+  managedRegions              Region[]              @relation("RegionAdmin")
+  reports                     Report[]
   managedSectorAdminUnits     SectorAdminUnit[]     @relation("SectorAdminUnitAdmin")
   managedSectorDistricts      SectorDistrict[]      @relation("SectorDistrictAdmin")
-  
-  // Chat relationships
-  createdChatRooms    ChatRoom[]     @relation("ChatRoomCreator")
-  chatMemberships     ChatMembership[]
-  sentMessages        ChatMessage[]
-  
+  managedSectorLocalities     SectorLocality[]      @relation("SectorLocalityAdmin")
+  managedSectorNationalLevels SectorNationalLevel[] @relation("SectorNationalLevelAdmin")
+  managedSectorRegions        SectorRegion[]        @relation("SectorRegionAdmin")
+  subscriptions               Subscription[]
+  approvedPlans               SubscriptionPlan[]    @relation("PlanApprover")
+  createdPlans                SubscriptionPlan[]    @relation("PlanCreator")
+  surveys                     SurveyResponse[]
+  adminUnit                   AdminUnit?            @relation(fields: [adminUnitId], references: [id])
+  district                    District?             @relation(fields: [districtId], references: [id])
+  expatriateRegion            ExpatriateRegion?     @relation(fields: [expatriateRegionId], references: [id])
+  locality                    Locality?             @relation(fields: [localityId], references: [id])
+  nationalLevel               NationalLevel?        @relation(fields: [nationalLevelId], references: [id])
+  region                      Region?               @relation(fields: [regionId], references: [id])
+  sectorAdminUnit             SectorAdminUnit?      @relation(fields: [sectorAdminUnitId], references: [id])
+  sectorDistrict              SectorDistrict?       @relation(fields: [sectorDistrictId], references: [id])
+  sectorLocality              SectorLocality?       @relation(fields: [sectorLocalityId], references: [id])
+  sectorNationalLevel         SectorNationalLevel?  @relation(fields: [sectorNationalLevelId], references: [id])
+  sectorRegion                SectorRegion?         @relation(fields: [sectorRegionId], references: [id])
+  votes                       Vote[]
+  votingItems                 VotingItem[]
+
   @@index([mobileNumber])
 }
 
 model Profile {
-  id          String    @id @default(uuid())
-  userId      String    @unique
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  userId      String   @unique
   firstName   String?
   lastName    String?
   phoneNumber String?
   avatarUrl   String?
-  status      String    @default("active") // active or disabled
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
   token     String   @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Content {
@@ -504,273 +342,243 @@ model Content {
 }
 
 model Bulletin {
-  id          String   @id @default(uuid())
-  title       String
-  content     String
-  date        DateTime
-  image       String?
-  published   Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // ===== ORIGINAL HIERARCHY TARGETING =====
-  targetNationalLevelId String?
-  targetNationalLevel   NationalLevel? @relation(fields: [targetNationalLevelId], references: [id])
-  targetRegionId        String?
-  targetRegion          Region?   @relation(fields: [targetRegionId], references: [id])
-  targetLocalityId      String?
-  targetLocality        Locality? @relation(fields: [targetLocalityId], references: [id])
-  targetAdminUnitId     String?
-  targetAdminUnit       AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
-  targetDistrictId      String?
-  targetDistrict        District? @relation(fields: [targetDistrictId], references: [id])
-  
-  // ===== EXPATRIATE HIERARCHY TARGETING =====
-  targetExpatriateRegionId String?
-  targetExpatriateRegion   ExpatriateRegion? @relation("ExpatriateRegionBulletins", fields: [targetExpatriateRegionId], references: [id])
-  
-  // ===== SECTOR HIERARCHY TARGETING =====
-  targetSectorNationalLevelId String?
-  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelBulletins", fields: [targetSectorNationalLevelId], references: [id])
-  targetSectorRegionId        String?
-  targetSectorRegion          SectorRegion? @relation("SectorRegionBulletins", fields: [targetSectorRegionId], references: [id])
-  targetSectorLocalityId      String?
-  targetSectorLocality        SectorLocality? @relation("SectorLocalityBulletins", fields: [targetSectorLocalityId], references: [id])
+  id                          String               @id @default(uuid())
+  title                       String
+  content                     String
+  date                        DateTime
+  image                       String?
+  published                   Boolean              @default(true)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  targetRegionId              String?
+  targetLocalityId            String?
+  targetAdminUnitId           String?
+  targetDistrictId            String?
+  targetExpatriateRegionId    String?
+  targetNationalLevelId       String?
   targetSectorAdminUnitId     String?
-  targetSectorAdminUnit       SectorAdminUnit? @relation("SectorAdminUnitBulletins", fields: [targetSectorAdminUnitId], references: [id])
   targetSectorDistrictId      String?
-  targetSectorDistrict        SectorDistrict? @relation("SectorDistrictBulletins", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocalityId      String?
+  targetSectorNationalLevelId String?
+  targetSectorRegionId        String?
+  targetAdminUnit             AdminUnit?           @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrict              District?            @relation(fields: [targetDistrictId], references: [id])
+  targetExpatriateRegion      ExpatriateRegion?    @relation("ExpatriateRegionBulletins", fields: [targetExpatriateRegionId], references: [id])
+  targetLocality              Locality?            @relation(fields: [targetLocalityId], references: [id])
+  targetNationalLevel         NationalLevel?       @relation(fields: [targetNationalLevelId], references: [id])
+  targetRegion                Region?              @relation(fields: [targetRegionId], references: [id])
+  targetSectorAdminUnit       SectorAdminUnit?     @relation("SectorAdminUnitBulletins", fields: [targetSectorAdminUnitId], references: [id])
+  targetSectorDistrict        SectorDistrict?      @relation("SectorDistrictBulletins", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocality        SectorLocality?      @relation("SectorLocalityBulletins", fields: [targetSectorLocalityId], references: [id])
+  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelBulletins", fields: [targetSectorNationalLevelId], references: [id])
+  targetSectorRegion          SectorRegion?        @relation("SectorRegionBulletins", fields: [targetSectorRegionId], references: [id])
 }
 
 model ArchiveDocument {
-  id          String   @id @default(uuid())
-  title       String
-  type        String
-  category    String
-  date        DateTime
-  size        String
-  url         String
-  published   Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  title     String
+  type      String
+  category  String
+  date      DateTime
+  size      String
+  url       String
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Survey {
-  id          String          @id @default(uuid())
-  title       String
-  description String
-  dueDate     DateTime
-  questions   String          // Stored as JSON string
-  audience    String          @default("public") // "public" or "member"
-  published   Boolean         @default(false)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  responses   SurveyResponse[]
-  
-  // ===== ORIGINAL HIERARCHY TARGETING =====
-  targetNationalLevelId String?
-  targetNationalLevel   NationalLevel? @relation(fields: [targetNationalLevelId], references: [id])
-  targetRegionId        String?
-  targetRegion          Region?   @relation(fields: [targetRegionId], references: [id])
-  targetLocalityId      String?
-  targetLocality        Locality? @relation(fields: [targetLocalityId], references: [id])
-  targetAdminUnitId     String?
-  targetAdminUnit       AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
-  targetDistrictId      String?
-  targetDistrict        District? @relation(fields: [targetDistrictId], references: [id])
-  
-  // ===== EXPATRIATE HIERARCHY TARGETING =====
-  targetExpatriateRegionId String?
-  targetExpatriateRegion   ExpatriateRegion? @relation("ExpatriateRegionSurveys", fields: [targetExpatriateRegionId], references: [id])
-  
-  // ===== SECTOR HIERARCHY TARGETING =====
-  targetSectorNationalLevelId String?
-  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelSurveys", fields: [targetSectorNationalLevelId], references: [id])
-  targetSectorRegionId        String?
-  targetSectorRegion          SectorRegion? @relation("SectorRegionSurveys", fields: [targetSectorRegionId], references: [id])
-  targetSectorLocalityId      String?
-  targetSectorLocality        SectorLocality? @relation("SectorLocalitySurveys", fields: [targetSectorLocalityId], references: [id])
+  id                          String               @id @default(uuid())
+  title                       String
+  description                 String
+  dueDate                     DateTime
+  questions                   String
+  published                   Boolean              @default(false)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  targetRegionId              String?
+  targetLocalityId            String?
+  targetAdminUnitId           String?
+  targetDistrictId            String?
+  audience                    String               @default("public")
+  targetExpatriateRegionId    String?
+  targetNationalLevelId       String?
   targetSectorAdminUnitId     String?
-  targetSectorAdminUnit       SectorAdminUnit? @relation("SectorAdminUnitSurveys", fields: [targetSectorAdminUnitId], references: [id])
   targetSectorDistrictId      String?
-  targetSectorDistrict        SectorDistrict? @relation("SectorDistrictSurveys", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocalityId      String?
+  targetSectorNationalLevelId String?
+  targetSectorRegionId        String?
+  targetAdminUnit             AdminUnit?           @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrict              District?            @relation(fields: [targetDistrictId], references: [id])
+  targetExpatriateRegion      ExpatriateRegion?    @relation("ExpatriateRegionSurveys", fields: [targetExpatriateRegionId], references: [id])
+  targetLocality              Locality?            @relation(fields: [targetLocalityId], references: [id])
+  targetNationalLevel         NationalLevel?       @relation(fields: [targetNationalLevelId], references: [id])
+  targetRegion                Region?              @relation(fields: [targetRegionId], references: [id])
+  targetSectorAdminUnit       SectorAdminUnit?     @relation("SectorAdminUnitSurveys", fields: [targetSectorAdminUnitId], references: [id])
+  targetSectorDistrict        SectorDistrict?      @relation("SectorDistrictSurveys", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocality        SectorLocality?      @relation("SectorLocalitySurveys", fields: [targetSectorLocalityId], references: [id])
+  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelSurveys", fields: [targetSectorNationalLevelId], references: [id])
+  targetSectorRegion          SectorRegion?        @relation("SectorRegionSurveys", fields: [targetSectorRegionId], references: [id])
+  responses                   SurveyResponse[]
 }
 
 model SurveyResponse {
-  id        String   @id @default(uuid())
-  surveyId  String
-  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  answers   String   // Stored as JSON string
+  id          String   @id @default(uuid())
+  surveyId    String
+  userId      String
+  answers     String
   submittedAt DateTime @default(now())
+  survey      Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([surveyId, userId])
 }
 
 model VotingItem {
-  id          String    @id @default(uuid())
-  title       String
-  description String
-  startDate   DateTime
-  endDate     DateTime
-  options     String    // Stored as JSON string
-  targetLevel String    // User level (الحي, الوحدة الإدارية, etc.) - kept for backward compatibility
-  voteType    String    @default("opinion") // "electoral" or "opinion"
-  createdById String
-  createdBy   User      @relation(fields: [createdById], references: [id])
-  published   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  votes       Vote[]
-  
-  // ===== ORIGINAL HIERARCHY TARGETING =====
-  targetNationalLevelId String?
-  targetNationalLevel   NationalLevel? @relation(fields: [targetNationalLevelId], references: [id])
-  targetRegionId        String?
-  targetRegion          Region?   @relation(fields: [targetRegionId], references: [id])
-  targetLocalityId      String?
-  targetLocality        Locality? @relation(fields: [targetLocalityId], references: [id])
-  targetAdminUnitId     String?
-  targetAdminUnit       AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
-  targetDistrictId      String?
-  targetDistrict        District? @relation(fields: [targetDistrictId], references: [id])
-  
-  // ===== EXPATRIATE HIERARCHY TARGETING =====
-  targetExpatriateRegionId String?
-  targetExpatriateRegion   ExpatriateRegion? @relation("ExpatriateRegionVotingItems", fields: [targetExpatriateRegionId], references: [id])
-  
-  // ===== SECTOR HIERARCHY TARGETING =====
-  targetSectorNationalLevelId String?
-  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelVotingItems", fields: [targetSectorNationalLevelId], references: [id])
-  targetSectorRegionId        String?
-  targetSectorRegion          SectorRegion? @relation("SectorRegionVotingItems", fields: [targetSectorRegionId], references: [id])
-  targetSectorLocalityId      String?
-  targetSectorLocality        SectorLocality? @relation("SectorLocalityVotingItems", fields: [targetSectorLocalityId], references: [id])
+  id                          String               @id @default(uuid())
+  title                       String
+  description                 String
+  startDate                   DateTime
+  endDate                     DateTime
+  options                     String
+  targetLevel                 String
+  voteType                    String               @default("opinion")
+  createdById                 String
+  published                   Boolean              @default(false)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  targetRegionId              String?
+  targetLocalityId            String?
+  targetAdminUnitId           String?
+  targetDistrictId            String?
+  targetExpatriateRegionId    String?
+  targetNationalLevelId       String?
   targetSectorAdminUnitId     String?
-  targetSectorAdminUnit       SectorAdminUnit? @relation("SectorAdminUnitVotingItems", fields: [targetSectorAdminUnitId], references: [id])
   targetSectorDistrictId      String?
-  targetSectorDistrict        SectorDistrict? @relation("SectorDistrictVotingItems", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocalityId      String?
+  targetSectorNationalLevelId String?
+  targetSectorRegionId        String?
+  votes                       Vote[]
+  createdBy                   User                 @relation(fields: [createdById], references: [id])
+  targetAdminUnit             AdminUnit?           @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrict              District?            @relation(fields: [targetDistrictId], references: [id])
+  targetExpatriateRegion      ExpatriateRegion?    @relation("ExpatriateRegionVotingItems", fields: [targetExpatriateRegionId], references: [id])
+  targetLocality              Locality?            @relation(fields: [targetLocalityId], references: [id])
+  targetNationalLevel         NationalLevel?       @relation(fields: [targetNationalLevelId], references: [id])
+  targetRegion                Region?              @relation(fields: [targetRegionId], references: [id])
+  targetSectorAdminUnit       SectorAdminUnit?     @relation("SectorAdminUnitVotingItems", fields: [targetSectorAdminUnitId], references: [id])
+  targetSectorDistrict        SectorDistrict?      @relation("SectorDistrictVotingItems", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocality        SectorLocality?      @relation("SectorLocalityVotingItems", fields: [targetSectorLocalityId], references: [id])
+  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelVotingItems", fields: [targetSectorNationalLevelId], references: [id])
+  targetSectorRegion          SectorRegion?        @relation("SectorRegionVotingItems", fields: [targetSectorRegionId], references: [id])
 }
 
 model Vote {
-  id          String     @id @default(uuid())
-  votingId    String
-  voting      VotingItem @relation(fields: [votingId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  optionId    String
-  votedAt     DateTime   @default(now())
+  id       String     @id @default(uuid())
+  votingId String
+  userId   String
+  optionId String
+  votedAt  DateTime   @default(now())
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voting   VotingItem @relation(fields: [votingId], references: [id], onDelete: Cascade)
 
   @@unique([votingId, userId])
 }
 
 model Report {
-  id          String   @id @default(uuid())
-  title       String
-  type        String
-  description String
-  date        DateTime
-  status      String   @default("pending")
-  attachmentName String?
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // ===== ORIGINAL HIERARCHY TARGETING =====
-  targetNationalLevelId String?
-  targetNationalLevel   NationalLevel? @relation(fields: [targetNationalLevelId], references: [id])
-  targetRegionId        String?
-  targetRegion          Region?   @relation(fields: [targetRegionId], references: [id])
-  targetLocalityId      String?
-  targetLocality        Locality? @relation(fields: [targetLocalityId], references: [id])
-  targetAdminUnitId     String?
-  targetAdminUnit       AdminUnit? @relation(fields: [targetAdminUnitId], references: [id])
-  targetDistrictId      String?
-  targetDistrict        District? @relation(fields: [targetDistrictId], references: [id])
-  
-  // ===== EXPATRIATE HIERARCHY TARGETING =====
-  targetExpatriateRegionId String?
-  targetExpatriateRegion   ExpatriateRegion? @relation("ExpatriateRegionReports", fields: [targetExpatriateRegionId], references: [id])
-  
-  // ===== SECTOR HIERARCHY TARGETING =====
-  targetSectorNationalLevelId String?
-  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelReports", fields: [targetSectorNationalLevelId], references: [id])
-  targetSectorRegionId        String?
-  targetSectorRegion          SectorRegion? @relation("SectorRegionReports", fields: [targetSectorRegionId], references: [id])
-  targetSectorLocalityId      String?
-  targetSectorLocality        SectorLocality? @relation("SectorLocalityReports", fields: [targetSectorLocalityId], references: [id])
+  id                          String               @id @default(uuid())
+  title                       String
+  type                        String
+  description                 String
+  date                        DateTime
+  status                      String               @default("pending")
+  attachmentName              String?
+  userId                      String
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  targetRegionId              String?
+  targetLocalityId            String?
+  targetAdminUnitId           String?
+  targetDistrictId            String?
+  targetExpatriateRegionId    String?
+  targetNationalLevelId       String?
   targetSectorAdminUnitId     String?
-  targetSectorAdminUnit       SectorAdminUnit? @relation("SectorAdminUnitReports", fields: [targetSectorAdminUnitId], references: [id])
   targetSectorDistrictId      String?
-  targetSectorDistrict        SectorDistrict? @relation("SectorDistrictReports", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocalityId      String?
+  targetSectorNationalLevelId String?
+  targetSectorRegionId        String?
+  targetAdminUnit             AdminUnit?           @relation(fields: [targetAdminUnitId], references: [id])
+  targetDistrict              District?            @relation(fields: [targetDistrictId], references: [id])
+  targetExpatriateRegion      ExpatriateRegion?    @relation("ExpatriateRegionReports", fields: [targetExpatriateRegionId], references: [id])
+  targetLocality              Locality?            @relation(fields: [targetLocalityId], references: [id])
+  targetNationalLevel         NationalLevel?       @relation(fields: [targetNationalLevelId], references: [id])
+  targetRegion                Region?              @relation(fields: [targetRegionId], references: [id])
+  targetSectorAdminUnit       SectorAdminUnit?     @relation("SectorAdminUnitReports", fields: [targetSectorAdminUnitId], references: [id])
+  targetSectorDistrict        SectorDistrict?      @relation("SectorDistrictReports", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocality        SectorLocality?      @relation("SectorLocalityReports", fields: [targetSectorLocalityId], references: [id])
+  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelReports", fields: [targetSectorNationalLevelId], references: [id])
+  targetSectorRegion          SectorRegion?        @relation("SectorRegionReports", fields: [targetSectorRegionId], references: [id])
+  user                        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SubscriptionPlan {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  price       String
-  currency    String
-  period      String
-  features    String   // Stored as JSON string
-  active      Boolean  @default(true)
-  isApproved  Boolean  @default(false)
-  isDonation  Boolean  @default(false) // True for donation requests, false for fixed subscriptions
-  creatorId   String?
-  creator     User?    @relation("PlanCreator", fields: [creatorId], references: [id])
-  approverId  String?
-  approver    User?    @relation("PlanApprover", fields: [approverId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  subscriptions Subscription[]
-  
-  // ===== ORIGINAL HIERARCHY TARGETING =====
-  targetNationalLevelId String?
-  targetNationalLevel   NationalLevel? @relation("NationalLevelPlans", fields: [targetNationalLevelId], references: [id])
-  targetRegionId        String?
-  targetRegion          Region?   @relation("RegionPlans", fields: [targetRegionId], references: [id])
-  targetLocalityId      String?
-  targetLocality        Locality? @relation("LocalityPlans", fields: [targetLocalityId], references: [id])
-  targetAdminUnitId     String?
-  targetAdminUnit       AdminUnit? @relation("AdminUnitPlans", fields: [targetAdminUnitId], references: [id])
-  targetDistrictId      String?
-  targetDistrict        District? @relation("DistrictPlans", fields: [targetDistrictId], references: [id])
-  
-  // ===== EXPATRIATE HIERARCHY TARGETING =====
-  targetExpatriateRegionId String?
-  targetExpatriateRegion   ExpatriateRegion? @relation("ExpatriateRegionPlans", fields: [targetExpatriateRegionId], references: [id])
-  
-  // ===== SECTOR HIERARCHY TARGETING =====
-  targetSectorNationalLevelId String?
-  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelPlans", fields: [targetSectorNationalLevelId], references: [id])
-  targetSectorRegionId        String?
-  targetSectorRegion          SectorRegion? @relation("SectorRegionPlans", fields: [targetSectorRegionId], references: [id])
-  targetSectorLocalityId      String?
-  targetSectorLocality        SectorLocality? @relation("SectorLocalityPlans", fields: [targetSectorLocalityId], references: [id])
+  id                          String               @id @default(uuid())
+  title                       String
+  price                       String
+  currency                    String
+  period                      String
+  features                    String
+  active                      Boolean              @default(true)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  approverId                  String?
+  creatorId                   String?
+  description                 String?
+  isApproved                  Boolean              @default(false)
+  isDonation                  Boolean              @default(false)
+  targetAdminUnitId           String?
+  targetDistrictId            String?
+  targetLocalityId            String?
+  targetRegionId              String?
+  targetExpatriateRegionId    String?
+  targetNationalLevelId       String?
   targetSectorAdminUnitId     String?
-  targetSectorAdminUnit       SectorAdminUnit? @relation("SectorAdminUnitPlans", fields: [targetSectorAdminUnitId], references: [id])
   targetSectorDistrictId      String?
-  targetSectorDistrict        SectorDistrict? @relation("SectorDistrictPlans", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocalityId      String?
+  targetSectorNationalLevelId String?
+  targetSectorRegionId        String?
+  subscriptions               Subscription[]
+  approver                    User?                @relation("PlanApprover", fields: [approverId], references: [id])
+  creator                     User?                @relation("PlanCreator", fields: [creatorId], references: [id])
+  targetAdminUnit             AdminUnit?           @relation("AdminUnitPlans", fields: [targetAdminUnitId], references: [id])
+  targetDistrict              District?            @relation("DistrictPlans", fields: [targetDistrictId], references: [id])
+  targetExpatriateRegion      ExpatriateRegion?    @relation("ExpatriateRegionPlans", fields: [targetExpatriateRegionId], references: [id])
+  targetLocality              Locality?            @relation("LocalityPlans", fields: [targetLocalityId], references: [id])
+  targetNationalLevel         NationalLevel?       @relation("NationalLevelPlans", fields: [targetNationalLevelId], references: [id])
+  targetRegion                Region?              @relation("RegionPlans", fields: [targetRegionId], references: [id])
+  targetSectorAdminUnit       SectorAdminUnit?     @relation("SectorAdminUnitPlans", fields: [targetSectorAdminUnitId], references: [id])
+  targetSectorDistrict        SectorDistrict?      @relation("SectorDistrictPlans", fields: [targetSectorDistrictId], references: [id])
+  targetSectorLocality        SectorLocality?      @relation("SectorLocalityPlans", fields: [targetSectorLocalityId], references: [id])
+  targetSectorNationalLevel   SectorNationalLevel? @relation("SectorNationalLevelPlans", fields: [targetSectorNationalLevelId], references: [id])
+  targetSectorRegion          SectorRegion?        @relation("SectorRegionPlans", fields: [targetSectorRegionId], references: [id])
 }
 
 model Subscription {
-  id          String          @id @default(uuid())
-  planId      String
-  plan        SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  startDate   DateTime
-  endDate     DateTime
-  amount      String          // Actual amount paid (could be different from plan price for donations)
-  receipt     String?         // URL to receipt image or document
-  paymentDate DateTime?
+  id            String           @id @default(uuid())
+  planId        String
+  userId        String
+  startDate     DateTime
+  endDate       DateTime
+  status        String           @default("active")
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  amount        String
+  paymentDate   DateTime?
   paymentMethod String?
-  paymentStatus String        @default("pending") // pending, paid, cancelled
-  status      String          @default("active")
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  paymentStatus String           @default("pending")
+  receipt       String?
+  plan          SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Settings {
@@ -782,78 +590,64 @@ model Settings {
 }
 
 model MemberDetails {
-  id          String    @id @default(uuid())
-  userId      String    @unique
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Personal Information
-  fullName    String
-  nickname    String?
-  birthDate   String?
-  birthPlace  String?
-  birthLocality String?
-  birthState  String?
-  gender      String?
-  religion    String?
-  maritalStatus String?
-  nationalId  String?
-  nationalIdIssueDate String?
-  passportNumber String?
-  
-  // Residence Information
-  neighborhood String?
-  locality    String?
-  state       String?
-  phone       String?
-  mobile      String?
-  
-  // Education and Work
-  highestEducation String?
-  educationInstitution String?
-  graduationYear String?
-  currentJob   String?
-  jobSector    String?
-  employmentStatus String?
-  workAddress  String?
-  
-  // Additional Information
-  disability   String?
-  residenceAbroad String?
-  electoralDistrict String?
-  
-  // Political and Social Activity
+  id                        String   @id @default(uuid())
+  userId                    String   @unique
+  fullName                  String
+  nickname                  String?
+  birthDate                 String?
+  birthPlace                String?
+  birthLocality             String?
+  birthState                String?
+  gender                    String?
+  religion                  String?
+  maritalStatus             String?
+  nationalId                String?
+  nationalIdIssueDate       String?
+  passportNumber            String?
+  neighborhood              String?
+  locality                  String?
+  state                     String?
+  phone                     String?
+  mobile                    String?
+  highestEducation          String?
+  educationInstitution      String?
+  graduationYear            String?
+  currentJob                String?
+  jobSector                 String?
+  employmentStatus          String?
+  workAddress               String?
+  disability                String?
+  residenceAbroad           String?
+  electoralDistrict         String?
   previousCouncilMembership String?
-  previousPartyMembership String?
+  previousPartyMembership   String?
   civilSocietyParticipation String?
-  clubMembership String?
-  professionalMembership String?
-  
-  // Timestamps
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  clubMembership            String?
+  professionalMembership    String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// Chat Models
 model ChatRoom {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   title       String
   createdById String
-  createdBy   User     @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   memberships ChatMembership[]
   messages    ChatMessage[]
+  createdBy   User             @relation("ChatRoomCreator", fields: [createdById], references: [id], onDelete: Cascade)
 }
 
 model ChatMembership {
-  id        String   @id @default(uuid())
-  roomId    String
-  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  joinedAt  DateTime @default(now())
-  
+  id       String   @id @default(uuid())
+  roomId   String
+  userId   String
+  joinedAt DateTime @default(now())
+  room     ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([roomId, userId])
   @@index([userId])
   @@index([roomId])
@@ -862,15 +656,38 @@ model ChatMembership {
 model ChatMessage {
   id        String   @id @default(uuid())
   roomId    String
-  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
   senderId  String
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
   text      String
   createdAt DateTime @default(now())
-  
+  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
   @@index([roomId, createdAt])
   @@index([senderId])
 }
 
-// Role enum replaced with String for SQLite compatibility
-// Possible values: "USER", "ADMIN"
+enum AdminLevel {
+  GENERAL_SECRETARIAT
+  REGION
+  LOCALITY
+  ADMIN_UNIT
+  DISTRICT
+  USER
+  ADMIN
+  NATIONAL_LEVEL
+  EXPATRIATE_GENERAL
+  EXPATRIATE_REGION
+}
+
+enum SectorType {
+  SOCIAL
+  ECONOMIC
+  ORGANIZATIONAL
+  POLITICAL
+}
+
+enum ActiveHierarchy {
+  ORIGINAL
+  EXPATRIATE
+  SECTOR
+}

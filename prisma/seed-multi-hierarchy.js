@@ -1,8 +1,16 @@
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+});
 
 async function main() {
-  console.log('Starting multi-hierarchy seed...');
+  try {
+    console.log('Starting multi-hierarchy seed...');
+    
+    // Test database connection
+    await prisma.$connect();
+    console.log('Database connected successfully');
 
   // ===== SEED NATIONAL LEVEL =====
   console.log('Creating National Level...');
@@ -104,15 +112,18 @@ async function main() {
     console.log(`  Created sector for ${firstExpatRegion.name}: ${sectorNationalLevel.name}`);
   }
 
-  console.log('\nMulti-hierarchy seed completed successfully!');
+    console.log('\nMulti-hierarchy seed completed successfully!');
+  } catch (error) {
+    console.error('Error seeding multi-hierarchy data:', error);
+    throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 main()
   .catch((e) => {
     console.error('Error seeding multi-hierarchy data:', e);
     process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
   });
 
