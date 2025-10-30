@@ -162,10 +162,11 @@ const getBulletins = async (adminUser = null) => {
       }
     });
 
-    return bulletins.map(bulletin => ({
-      ...bulletin,
-      date: bulletin.date.toISOString().split('T')[0] // Format date as YYYY-MM-DD
-    }));
+      return bulletins.map(bulletin => ({
+        ...bulletin,
+        date: bulletin.date.toISOString().split('T')[0],
+        hierarchy: determineHierarchyFromTargets(bulletin)
+      }));
   } catch (error) {
     console.error('Error in getBulletins service:', error);
     
@@ -179,6 +180,40 @@ const getBulletins = async (adminUser = null) => {
   }
 };
 
+// ===== Hierarchy Targeting Utilities =====
+function determineHierarchyFromTargets(targets) {
+  const hasOriginal = !!(targets.targetNationalLevelId || targets.targetRegionId || targets.targetLocalityId || targets.targetAdminUnitId || targets.targetDistrictId);
+  const hasExpatriate = !!targets.targetExpatriateRegionId;
+  const hasSector = !!(targets.targetSectorNationalLevelId || targets.targetSectorRegionId || targets.targetSectorLocalityId || targets.targetSectorAdminUnitId || targets.targetSectorDistrictId);
+  const categories = [hasOriginal, hasExpatriate, hasSector].filter(Boolean).length;
+  if (categories > 1) return 'MIXED';
+  if (hasExpatriate) return 'EXPATRIATE';
+  if (hasSector) return 'SECTOR';
+  if (hasOriginal) return 'ORIGINAL';
+  return 'GLOBAL';
+}
+
+function validateExclusiveHierarchyTargets(payload) {
+  const targets = {
+    targetNationalLevelId: payload.targetNationalLevelId,
+    targetRegionId: payload.targetRegionId,
+    targetLocalityId: payload.targetLocalityId,
+    targetAdminUnitId: payload.targetAdminUnitId,
+    targetDistrictId: payload.targetDistrictId,
+    targetExpatriateRegionId: payload.targetExpatriateRegionId,
+    targetSectorNationalLevelId: payload.targetSectorNationalLevelId,
+    targetSectorRegionId: payload.targetSectorRegionId,
+    targetSectorLocalityId: payload.targetSectorLocalityId,
+    targetSectorAdminUnitId: payload.targetSectorAdminUnitId,
+    targetSectorDistrictId: payload.targetSectorDistrictId,
+  };
+  const kind = determineHierarchyFromTargets(targets);
+  if (kind === 'MIXED') {
+    throw new Error('Invalid targeting: cannot mix ORIGINAL, EXPATRIATE, and SECTOR targets. Choose one hierarchy.');
+  }
+  return kind;
+}
+
 // Create a new bulletin
 const createBulletin = async (bulletinData) => {
   try {
@@ -187,16 +222,24 @@ const createBulletin = async (bulletinData) => {
       content, 
       date, 
       image, 
+      // original
+      targetNationalLevelId,
       targetRegionId, 
       targetLocalityId, 
       targetAdminUnitId, 
-      targetDistrictId 
+      targetDistrictId,
+      // expatriate
+      targetExpatriateRegionId,
+      // sector
+      targetSectorNationalLevelId,
+      targetSectorRegionId,
+      targetSectorLocalityId,
+      targetSectorAdminUnitId,
+      targetSectorDistrictId
     } = bulletinData;
     
-    // Validate required hierarchy field
-    if (!targetRegionId) {
-      throw new Error('targetRegionId is required for creating bulletins');
-    }
+    // Validate exclusive hierarchy targeting
+    validateExclusiveHierarchyTargets(bulletinData);
     
     const result = await prisma.bulletin.create({
         data: {
@@ -205,11 +248,20 @@ const createBulletin = async (bulletinData) => {
           date: new Date(date),
           image: image || null,
           published: true,
-          // Add hierarchy targeting
-          targetRegionId,
+          // ORIGINAL hierarchy targets
+          targetNationalLevelId: targetNationalLevelId || null,
+          targetRegionId: targetRegionId || null,
           targetLocalityId: targetLocalityId || null,
           targetAdminUnitId: targetAdminUnitId || null,
-          targetDistrictId: targetDistrictId || null
+          targetDistrictId: targetDistrictId || null,
+          // EXPATRIATE hierarchy target
+          targetExpatriateRegionId: targetExpatriateRegionId || null,
+          // SECTOR hierarchy targets
+          targetSectorNationalLevelId: targetSectorNationalLevelId || null,
+          targetSectorRegionId: targetSectorRegionId || null,
+          targetSectorLocalityId: targetSectorLocalityId || null,
+          targetSectorAdminUnitId: targetSectorAdminUnitId || null,
+          targetSectorDistrictId: targetSectorDistrictId || null
         }
       });
       
@@ -218,7 +270,8 @@ const createBulletin = async (bulletinData) => {
       
       return {
         ...result,
-        date: result.date.toISOString().split('T')[0] // Format date as YYYY-MM-DD
+        date: result.date.toISOString().split('T')[0], // Format date as YYYY-MM-DD
+        hierarchy: determineHierarchyFromTargets(result)
       };
   } catch (error) {
     console.error('Error in createBulletin service:', error);
@@ -240,10 +293,8 @@ const updateBulletin = async (id, bulletinData) => {
       targetDistrictId 
     } = bulletinData;
     
-    // Validate required hierarchy field
-    if (!targetRegionId) {
-      throw new Error('targetRegionId is required for updating bulletins');
-    }
+    // Validate exclusive hierarchy targeting
+    validateExclusiveHierarchyTargets(bulletinData);
     
     // Prepare update data - only include image if it was provided
     const updateData = {
@@ -251,11 +302,18 @@ const updateBulletin = async (id, bulletinData) => {
       content,
       date: new Date(date),
       updatedAt: new Date(),
-      // Include hierarchy targeting fields
-      targetRegionId,
+      // Include hierarchy targeting fields (single-hierarchy only)
+      targetNationalLevelId: bulletinData.targetNationalLevelId || null,
+      targetRegionId: targetRegionId || null,
       targetLocalityId: targetLocalityId || null,
       targetAdminUnitId: targetAdminUnitId || null,
-      targetDistrictId: targetDistrictId || null
+      targetDistrictId: targetDistrictId || null,
+      targetExpatriateRegionId: bulletinData.targetExpatriateRegionId || null,
+      targetSectorNationalLevelId: bulletinData.targetSectorNationalLevelId || null,
+      targetSectorRegionId: bulletinData.targetSectorRegionId || null,
+      targetSectorLocalityId: bulletinData.targetSectorLocalityId || null,
+      targetSectorAdminUnitId: bulletinData.targetSectorAdminUnitId || null,
+      targetSectorDistrictId: bulletinData.targetSectorDistrictId || null
     };
     
     // Only update image if a new one was provided
@@ -273,7 +331,8 @@ const updateBulletin = async (id, bulletinData) => {
       
       return {
         ...result,
-        date: result.date.toISOString().split('T')[0] // Format date as YYYY-MM-DD
+        date: result.date.toISOString().split('T')[0],
+        hierarchy: determineHierarchyFromTargets(result)
       };
   } catch (error) {
     console.error('Error in updateBulletin service:', error);
@@ -488,7 +547,8 @@ const getSurveys = async (userId, adminUser = null) => {
         targetSectorRegionId: survey.targetSectorRegionId,
         targetSectorLocalityId: survey.targetSectorLocalityId,
         targetSectorAdminUnitId: survey.targetSectorAdminUnitId,
-        targetSectorDistrictId: survey.targetSectorDistrictId
+        targetSectorDistrictId: survey.targetSectorDistrictId,
+        hierarchy: determineHierarchyFromTargets(survey)
       };
     });
   } catch (error) {
@@ -1409,10 +1469,8 @@ const createVotingItem = async (userId, votingData) => {
       throw new Error('Missing required fields');
     }
     
-    // Validate required hierarchy field
-    if (!targetRegionId) {
-      throw new Error('targetRegionId is required for creating voting items');
-    }
+    // Validate exclusive hierarchy targeting
+    validateExclusiveHierarchyTargets(votingData);
     
     // Validate voteType if provided, otherwise default to "opinion"
     const validVoteType = voteType === "electoral" || voteType === "opinion" ? voteType : "opinion";
@@ -1438,11 +1496,20 @@ const createVotingItem = async (userId, votingData) => {
         voteType: validVoteType,
         createdById: userId,
         published: true,
-        // Add hierarchy targeting
-        targetRegionId,
+        // ORIGINAL hierarchy targets
+        targetNationalLevelId: votingData.targetNationalLevelId || null,
+        targetRegionId: targetRegionId || null,
         targetLocalityId: targetLocalityId || null,
         targetAdminUnitId: targetAdminUnitId || null,
-        targetDistrictId: targetDistrictId || null
+        targetDistrictId: targetDistrictId || null,
+        // EXPATRIATE
+        targetExpatriateRegionId: votingData.targetExpatriateRegionId || null,
+        // SECTOR
+        targetSectorNationalLevelId: votingData.targetSectorNationalLevelId || null,
+        targetSectorRegionId: votingData.targetSectorRegionId || null,
+        targetSectorLocalityId: votingData.targetSectorLocalityId || null,
+        targetSectorAdminUnitId: votingData.targetSectorAdminUnitId || null,
+        targetSectorDistrictId: votingData.targetSectorDistrictId || null
       },
       include: {
         createdBy: {
@@ -1479,7 +1546,8 @@ const createVotingItem = async (userId, votingData) => {
         name: votingItem.createdBy.email || "مستخدم",
         level: votingItem.createdBy.role
       },
-      status
+      status,
+      hierarchy: determineHierarchyFromTargets(votingItem)
     };
   } catch (error) {
     console.error('Error in createVotingItem service:', error);
@@ -1508,10 +1576,8 @@ const createSurvey = async (userId, surveyData) => {
       throw new Error('Missing required fields');
     }
     
-    // Validate required hierarchy field
-    if (!targetRegionId) {
-      throw new Error('targetRegionId is required for creating surveys');
-    }
+    // Validate exclusive hierarchy targeting
+    validateExclusiveHierarchyTargets(surveyData);
     
     // Find the user
     const user = await prisma.user.findUnique({
@@ -1536,11 +1602,20 @@ const createSurvey = async (userId, surveyData) => {
         questions: JSON.stringify(questions),
         published: true,
         audience: resolvedAudience,
-        // Add hierarchy targeting
-        targetRegionId,
+        // ORIGINAL hierarchy targets
+        targetNationalLevelId: surveyData.targetNationalLevelId || null,
+        targetRegionId: targetRegionId || null,
         targetLocalityId: targetLocalityId || null,
         targetAdminUnitId: targetAdminUnitId || null,
-        targetDistrictId: targetDistrictId || null
+        targetDistrictId: targetDistrictId || null,
+        // EXPATRIATE
+        targetExpatriateRegionId: surveyData.targetExpatriateRegionId || null,
+        // SECTOR
+        targetSectorNationalLevelId: surveyData.targetSectorNationalLevelId || null,
+        targetSectorRegionId: surveyData.targetSectorRegionId || null,
+        targetSectorLocalityId: surveyData.targetSectorLocalityId || null,
+        targetSectorAdminUnitId: surveyData.targetSectorAdminUnitId || null,
+        targetSectorDistrictId: surveyData.targetSectorDistrictId || null
       }
     });
     
@@ -1551,7 +1626,8 @@ const createSurvey = async (userId, surveyData) => {
       description: survey.description,
       dueDate: survey.dueDate.toISOString().split('T')[0],
       questions: questions,
-      published: survey.published
+      published: survey.published,
+      hierarchy: determineHierarchyFromTargets(survey)
     };
   } catch (error) {
     console.error('Error in createSurvey service:', error);
