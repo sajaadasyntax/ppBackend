@@ -1,7 +1,7 @@
 // Error handling middleware
 const errorHandler = (err, req, res, next) => {
   console.error('API Error:', err);
-  
+   
   // Check if it's a Prisma error
   if (err.name === 'PrismaClientInitializationError' || 
       err.name === 'PrismaClientKnownRequestError' ||
