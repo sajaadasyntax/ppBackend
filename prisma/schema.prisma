@@ -35,11 +35,11 @@ model Region {
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   adminId         String?
-  nationalLevelId String?
+  nationalLevelId String
   bulletins       Bulletin[]
   localities      Locality[]
   admin           User?              @relation("RegionAdmin", fields: [adminId], references: [id])
-  nationalLevel   NationalLevel?     @relation(fields: [nationalLevelId], references: [id])
+  nationalLevel   NationalLevel      @relation(fields: [nationalLevelId], references: [id])
   reports         Report[]
   plans           SubscriptionPlan[] @relation("RegionPlans")
   surveys         Survey[]
@@ -141,12 +141,12 @@ model SectorNationalLevel {
   active             Boolean            @default(true)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
-  expatriateRegionId String?
+  expatriateRegionId String
   adminId            String?
   bulletins          Bulletin[]         @relation("SectorNationalLevelBulletins")
   reports            Report[]           @relation("SectorNationalLevelReports")
   admin              User?              @relation("SectorNationalLevelAdmin", fields: [adminId], references: [id])
-  expatriateRegion   ExpatriateRegion?  @relation(fields: [expatriateRegionId], references: [id])
+  expatriateRegion   ExpatriateRegion   @relation(fields: [expatriateRegionId], references: [id])
   sectorRegions      SectorRegion[]
   plans              SubscriptionPlan[] @relation("SectorNationalLevelPlans")
   surveys            Survey[]           @relation("SectorNationalLevelSurveys")
