@@ -100,7 +100,7 @@ export const createMember = async (req: AuthenticatedRequest, res: Response, _ne
     const { personalInfo, residenceInfo, educationAndWork, additionalInfo, politicalAndSocialActivity, hierarchyInfo, password, publicSignup } = req.body;
     
     // Validate required fields
-    const missingFields = [];
+    const missingFields: string[] = [];
     if (!personalInfo?.fullName) missingFields.push('fullName');
     if (!personalInfo?.nationalId) missingFields.push('nationalId');
     if (!residenceInfo?.mobile) missingFields.push('mobile');
@@ -850,7 +850,13 @@ export const getUserHierarchyPath = async (req: AuthenticatedRequest, res: Respo
     }
 
     // Build hierarchy path
-    const hierarchyPath = [];
+    interface HierarchyPathItem {
+      level: string;
+      id: string;
+      name: string;
+      code: string | null;
+    }
+    const hierarchyPath: HierarchyPathItem[] = [];
     
     if (user.district) {
       hierarchyPath.push({

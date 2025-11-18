@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import prisma from '../utils/prisma';
 import HierarchyService from '../services/hierarchyService';
 import { AuthenticatedRequest } from '../types';
+import { Subscription } from '@prisma/client';
 
 /**
  * Calculate subscription end date based on period
@@ -558,7 +559,7 @@ export const approveSubscriptionPlan = async (req: AuthenticatedRequest, res: Re
       
       console.log(`Creating automatic subscriptions for ${targetUsers.length} users`);
       
-      const subscriptions = [];
+      const subscriptions: Subscription[] = [];
       for (const user of targetUsers) {
         // Calculate subscription dates
         const startDate = new Date();
