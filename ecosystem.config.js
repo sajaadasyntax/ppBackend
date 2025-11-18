@@ -1,7 +1,7 @@
 module.exports = {
     apps: [{
       name: 'pp-backend',
-      script: 'src/app.js',
+      script: 'dist/app.js',
       instances: 1,
       exec_mode: 'cluster',
       env: {
