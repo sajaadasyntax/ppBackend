@@ -120,13 +120,44 @@ export const getRegionById = async (req: AuthenticatedRequest, res: Response, _n
 // Create new region
 export const createRegion = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
-    const { name, code, description, adminId } = req.body;
+    const { name, code, description, adminId, nationalLevelId } = req.body;
+    
+    // Validate required fields
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    if (!nationalLevelId) {
+      res.status(400).json({ error: 'National level ID is required' });
+      return;
+    }
+
+    // Verify national level exists
+    const nationalLevel = await prisma.nationalLevel.findUnique({
+      where: { id: nationalLevelId }
+    });
+
+    if (!nationalLevel) {
+      res.status(400).json({ error: 'Invalid national level ID' });
+      return;
+    }
+
+    const normalizedCode = typeof code === 'string' && code.trim().length > 0
+      ? code.trim().toUpperCase()
+      : undefined;
+
+    const normalizedDescription = typeof description === 'string' && description.trim().length > 0
+      ? description.trim()
+      : undefined;
     
     const region = await prisma.region.create({
       data: {
-        name,
-        code: code && code.trim() ? code.trim() : undefined,
-        description: description && description.trim() ? description.trim() : undefined,
+        name: trimmedName,
+        code: normalizedCode,
+        description: normalizedDescription,
+        nationalLevelId,
         adminId: adminId || undefined
       }
     });
@@ -146,17 +177,31 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
 export const updateRegion = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, adminId, active } = req.body;
+    const { name, code, description, adminId, active, nationalLevelId } = req.body;
+    
+    // If nationalLevelId is being updated, verify it exists
+    if (nationalLevelId !== undefined) {
+      const nationalLevel = await prisma.nationalLevel.findUnique({
+        where: { id: nationalLevelId }
+      });
+
+      if (!nationalLevel) {
+        res.status(400).json({ error: 'Invalid national level ID' });
+        return;
+      }
+    }
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (code !== undefined) updateData.code = code;
+    if (description !== undefined) updateData.description = description;
+    if (adminId !== undefined) updateData.adminId = adminId;
+    if (active !== undefined) updateData.active = active;
+    if (nationalLevelId !== undefined) updateData.nationalLevelId = nationalLevelId;
     
     const region = await prisma.region.update({
       where: { id },
-      data: {
-        name: name !== undefined ? name : undefined,
-        code: code !== undefined ? code : undefined,
-        description: description !== undefined ? description : undefined,
-        adminId: adminId !== undefined ? adminId : undefined,
-        active: active !== undefined ? active : undefined
-      }
+      data: updateData
     });
     
     res.json(region);
@@ -164,6 +209,10 @@ export const updateRegion = async (req: AuthenticatedRequest, res: Response, _ne
     console.error('Error updating region:', error);
     if (error.code === 'P2025') {
       res.status(404).json({ error: 'Region not found' });
+      return;
+    }
+    if (error.code === 'P2003') {
+      res.status(400).json({ error: 'Invalid national level ID' });
       return;
     }
     res.status(500).json({ error: 'Internal server error' });
@@ -244,16 +293,41 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
     const { name, code, description, adminId } = req.body;
     const regionId = req.params.regionId || req.body.regionId;
     
+    // Validate required fields
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
     if (!regionId) {
       res.status(400).json({ error: 'Region ID is required' });
       return;
     }
+
+    // Verify region exists
+    const region = await prisma.region.findUnique({
+      where: { id: regionId }
+    });
+
+    if (!region) {
+      res.status(400).json({ error: 'Invalid region ID' });
+      return;
+    }
+
+    const normalizedCode = typeof code === 'string' && code.trim().length > 0
+      ? code.trim().toUpperCase()
+      : undefined;
+
+    const normalizedDescription = typeof description === 'string' && description.trim().length > 0
+      ? description.trim()
+      : undefined;
     
     const locality = await prisma.locality.create({
       data: {
-        name,
-        code: code && code.trim() ? code.trim() : undefined,
-        description: description && description.trim() ? description.trim() : undefined,
+        name: trimmedName,
+        code: normalizedCode,
+        description: normalizedDescription,
         regionId,
         adminId: adminId || undefined
       }
@@ -385,16 +459,41 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
     const { name, code, description, adminId } = req.body;
     const localityId = req.params.localityId || req.body.localityId;
     
+    // Validate required fields
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
     if (!localityId) {
       res.status(400).json({ error: 'Locality ID is required' });
       return;
     }
+
+    // Verify locality exists
+    const locality = await prisma.locality.findUnique({
+      where: { id: localityId }
+    });
+
+    if (!locality) {
+      res.status(400).json({ error: 'Invalid locality ID' });
+      return;
+    }
+
+    const normalizedCode = typeof code === 'string' && code.trim().length > 0
+      ? code.trim().toUpperCase()
+      : undefined;
+
+    const normalizedDescription = typeof description === 'string' && description.trim().length > 0
+      ? description.trim()
+      : undefined;
     
     const adminUnit = await prisma.adminUnit.create({
       data: {
-        name,
-        code: code && code.trim() ? code.trim() : undefined,
-        description: description && description.trim() ? description.trim() : undefined,
+        name: trimmedName,
+        code: normalizedCode,
+        description: normalizedDescription,
         localityId,
         adminId: adminId || undefined
       }
@@ -529,16 +628,41 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
     const { name, code, description, adminId } = req.body;
     const adminUnitId = req.params.adminUnitId || req.body.adminUnitId;
     
+    // Validate required fields
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
     if (!adminUnitId) {
       res.status(400).json({ error: 'Administrative unit ID is required' });
       return;
     }
+
+    // Verify admin unit exists
+    const adminUnit = await prisma.adminUnit.findUnique({
+      where: { id: adminUnitId }
+    });
+
+    if (!adminUnit) {
+      res.status(400).json({ error: 'Invalid administrative unit ID' });
+      return;
+    }
+
+    const normalizedCode = typeof code === 'string' && code.trim().length > 0
+      ? code.trim().toUpperCase()
+      : undefined;
+
+    const normalizedDescription = typeof description === 'string' && description.trim().length > 0
+      ? description.trim()
+      : undefined;
     
     const district = await prisma.district.create({
       data: {
-        name,
-        code: code && code.trim() ? code.trim() : undefined,
-        description: description && description.trim() ? description.trim() : undefined,
+        name: trimmedName,
+        code: normalizedCode,
+        description: normalizedDescription,
         adminUnitId,
         adminId: adminId || undefined
       }

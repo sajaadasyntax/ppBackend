@@ -44,11 +44,25 @@ export async function getExpatriateRegionById(id: string): Promise<any> {
  * Create new expatriate region
  */
 export async function createExpatriateRegion(data: any): Promise<any> {
+  // Validate required fields
+  const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
+  if (!trimmedName) {
+    throw new Error('Name is required');
+  }
+
+  const normalizedCode = typeof data.code === 'string' && data.code.trim().length > 0
+    ? data.code.trim().toUpperCase()
+    : undefined;
+
+  const normalizedDescription = typeof data.description === 'string' && data.description.trim().length > 0
+    ? data.description.trim()
+    : undefined;
+
   return await prisma.expatriateRegion.create({
     data: {
-      name: data.name,
-      code: data.code,
-      description: data.description,
+      name: trimmedName,
+      code: normalizedCode,
+      description: normalizedDescription,
       active: data.active !== undefined ? data.active : true
     }
   });

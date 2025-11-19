@@ -41,6 +41,14 @@ export const createExpatriateRegion = async (req: AuthenticatedRequest, res: Res
     const region = await expatriateHierarchyService.createExpatriateRegion(req.body);
     res.status(201).json(region);
   } catch (error: any) {
+    if (error.message === 'Name is required') {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'An expatriate region with this code already exists' });
+      return;
+    }
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
 };

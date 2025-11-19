@@ -40,12 +40,43 @@ export async function getSectorNationalLevelById(id: string): Promise<any> {
 }
 
 export async function createSectorNationalLevel(data: any): Promise<any> {
+  // Validate required fields
+  const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
+  if (!trimmedName) {
+    throw new Error('Name is required');
+  }
+
+  if (!data.expatriateRegionId) {
+    throw new Error('Expatriate region ID is required');
+  }
+
+  if (!data.sectorType) {
+    throw new Error('Sector type is required');
+  }
+
+  // Verify expatriate region exists
+  const expatriateRegion = await prisma.expatriateRegion.findUnique({
+    where: { id: data.expatriateRegionId }
+  });
+
+  if (!expatriateRegion) {
+    throw new Error('Invalid expatriate region ID');
+  }
+
+  const normalizedCode = typeof data.code === 'string' && data.code.trim().length > 0
+    ? data.code.trim().toUpperCase()
+    : undefined;
+
+  const normalizedDescription = typeof data.description === 'string' && data.description.trim().length > 0
+    ? data.description.trim()
+    : undefined;
+
   return await prisma.sectorNationalLevel.create({
     data: {
-      name: data.name,
-      code: data.code,
+      name: trimmedName,
+      code: normalizedCode,
       sectorType: data.sectorType,
-      description: data.description,
+      description: normalizedDescription,
       expatriateRegionId: data.expatriateRegionId,
       active: data.active !== undefined ? data.active : true
     }
@@ -117,14 +148,68 @@ export async function getSectorRegionById(id: string): Promise<any> {
 }
 
 export async function createSectorRegion(data: any): Promise<any> {
+  // Validate required fields
+  const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
+  if (!trimmedName) {
+    throw new Error('Name is required');
+  }
+
+  if (!data.sectorType) {
+    throw new Error('Sector type is required');
+  }
+
+  // Require either sectorNationalLevelId or expatriateRegionId
+  if (!data.sectorNationalLevelId && !data.expatriateRegionId) {
+    throw new Error('Sector national level ID or expatriate region ID is required');
+  }
+
+  let expatriateRegionId = data.expatriateRegionId;
+
+  // If sectorNationalLevelId is provided, derive expatriateRegionId from it
+  if (data.sectorNationalLevelId) {
+    const sectorNationalLevel = await prisma.sectorNationalLevel.findUnique({
+      where: { id: data.sectorNationalLevelId },
+      select: { expatriateRegionId: true }
+    });
+
+    if (!sectorNationalLevel) {
+      throw new Error('Invalid sector national level ID');
+    }
+
+    // Use the parent's expatriateRegionId to prevent drift
+    expatriateRegionId = sectorNationalLevel.expatriateRegionId;
+
+    // Reject if caller tries to override with conflicting value
+    if (data.expatriateRegionId && data.expatriateRegionId !== expatriateRegionId) {
+      throw new Error('Expatriate region ID conflicts with parent sector national level');
+    }
+  } else if (expatriateRegionId) {
+    // Verify expatriate region exists if directly specified
+    const expatriateRegion = await prisma.expatriateRegion.findUnique({
+      where: { id: expatriateRegionId }
+    });
+
+    if (!expatriateRegion) {
+      throw new Error('Invalid expatriate region ID');
+    }
+  }
+
+  const normalizedCode = typeof data.code === 'string' && data.code.trim().length > 0
+    ? data.code.trim().toUpperCase()
+    : undefined;
+
+  const normalizedDescription = typeof data.description === 'string' && data.description.trim().length > 0
+    ? data.description.trim()
+    : undefined;
+
   return await prisma.sectorRegion.create({
     data: {
-      name: data.name,
-      code: data.code,
+      name: trimmedName,
+      code: normalizedCode,
       sectorType: data.sectorType,
-      description: data.description,
-      sectorNationalLevelId: data.sectorNationalLevelId,
-      expatriateRegionId: data.expatriateRegionId,
+      description: normalizedDescription,
+      sectorNationalLevelId: data.sectorNationalLevelId || null,
+      expatriateRegionId: expatriateRegionId || null,
       active: data.active !== undefined ? data.active : true
     }
   });
@@ -196,14 +281,68 @@ export async function getSectorLocalityById(id: string): Promise<any> {
 }
 
 export async function createSectorLocality(data: any): Promise<any> {
+  // Validate required fields
+  const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
+  if (!trimmedName) {
+    throw new Error('Name is required');
+  }
+
+  if (!data.sectorType) {
+    throw new Error('Sector type is required');
+  }
+
+  // Require either sectorRegionId or expatriateRegionId
+  if (!data.sectorRegionId && !data.expatriateRegionId) {
+    throw new Error('Sector region ID or expatriate region ID is required');
+  }
+
+  let expatriateRegionId = data.expatriateRegionId;
+
+  // If sectorRegionId is provided, derive expatriateRegionId from it
+  if (data.sectorRegionId) {
+    const sectorRegion = await prisma.sectorRegion.findUnique({
+      where: { id: data.sectorRegionId },
+      select: { expatriateRegionId: true }
+    });
+
+    if (!sectorRegion) {
+      throw new Error('Invalid sector region ID');
+    }
+
+    // Use the parent's expatriateRegionId to prevent drift
+    expatriateRegionId = sectorRegion.expatriateRegionId;
+
+    // Reject if caller tries to override with conflicting value
+    if (data.expatriateRegionId && data.expatriateRegionId !== expatriateRegionId) {
+      throw new Error('Expatriate region ID conflicts with parent sector region');
+    }
+  } else if (expatriateRegionId) {
+    // Verify expatriate region exists if directly specified
+    const expatriateRegion = await prisma.expatriateRegion.findUnique({
+      where: { id: expatriateRegionId }
+    });
+
+    if (!expatriateRegion) {
+      throw new Error('Invalid expatriate region ID');
+    }
+  }
+
+  const normalizedCode = typeof data.code === 'string' && data.code.trim().length > 0
+    ? data.code.trim().toUpperCase()
+    : undefined;
+
+  const normalizedDescription = typeof data.description === 'string' && data.description.trim().length > 0
+    ? data.description.trim()
+    : undefined;
+
   return await prisma.sectorLocality.create({
     data: {
-      name: data.name,
-      code: data.code,
+      name: trimmedName,
+      code: normalizedCode,
       sectorType: data.sectorType,
-      description: data.description,
-      sectorRegionId: data.sectorRegionId,
-      expatriateRegionId: data.expatriateRegionId,
+      description: normalizedDescription,
+      sectorRegionId: data.sectorRegionId || null,
+      expatriateRegionId: expatriateRegionId || null,
       active: data.active !== undefined ? data.active : true
     }
   });
@@ -275,14 +414,68 @@ export async function getSectorAdminUnitById(id: string): Promise<any> {
 }
 
 export async function createSectorAdminUnit(data: any): Promise<any> {
+  // Validate required fields
+  const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
+  if (!trimmedName) {
+    throw new Error('Name is required');
+  }
+
+  if (!data.sectorType) {
+    throw new Error('Sector type is required');
+  }
+
+  // Require either sectorLocalityId or expatriateRegionId
+  if (!data.sectorLocalityId && !data.expatriateRegionId) {
+    throw new Error('Sector locality ID or expatriate region ID is required');
+  }
+
+  let expatriateRegionId = data.expatriateRegionId;
+
+  // If sectorLocalityId is provided, derive expatriateRegionId from it
+  if (data.sectorLocalityId) {
+    const sectorLocality = await prisma.sectorLocality.findUnique({
+      where: { id: data.sectorLocalityId },
+      select: { expatriateRegionId: true }
+    });
+
+    if (!sectorLocality) {
+      throw new Error('Invalid sector locality ID');
+    }
+
+    // Use the parent's expatriateRegionId to prevent drift
+    expatriateRegionId = sectorLocality.expatriateRegionId;
+
+    // Reject if caller tries to override with conflicting value
+    if (data.expatriateRegionId && data.expatriateRegionId !== expatriateRegionId) {
+      throw new Error('Expatriate region ID conflicts with parent sector locality');
+    }
+  } else if (expatriateRegionId) {
+    // Verify expatriate region exists if directly specified
+    const expatriateRegion = await prisma.expatriateRegion.findUnique({
+      where: { id: expatriateRegionId }
+    });
+
+    if (!expatriateRegion) {
+      throw new Error('Invalid expatriate region ID');
+    }
+  }
+
+  const normalizedCode = typeof data.code === 'string' && data.code.trim().length > 0
+    ? data.code.trim().toUpperCase()
+    : undefined;
+
+  const normalizedDescription = typeof data.description === 'string' && data.description.trim().length > 0
+    ? data.description.trim()
+    : undefined;
+
   return await prisma.sectorAdminUnit.create({
     data: {
-      name: data.name,
-      code: data.code,
+      name: trimmedName,
+      code: normalizedCode,
       sectorType: data.sectorType,
-      description: data.description,
-      sectorLocalityId: data.sectorLocalityId,
-      expatriateRegionId: data.expatriateRegionId,
+      description: normalizedDescription,
+      sectorLocalityId: data.sectorLocalityId || null,
+      expatriateRegionId: expatriateRegionId || null,
       active: data.active !== undefined ? data.active : true
     }
   });
@@ -353,14 +546,68 @@ export async function getSectorDistrictById(id: string): Promise<any> {
 }
 
 export async function createSectorDistrict(data: any): Promise<any> {
+  // Validate required fields
+  const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
+  if (!trimmedName) {
+    throw new Error('Name is required');
+  }
+
+  if (!data.sectorType) {
+    throw new Error('Sector type is required');
+  }
+
+  // Require either sectorAdminUnitId or expatriateRegionId
+  if (!data.sectorAdminUnitId && !data.expatriateRegionId) {
+    throw new Error('Sector admin unit ID or expatriate region ID is required');
+  }
+
+  let expatriateRegionId = data.expatriateRegionId;
+
+  // If sectorAdminUnitId is provided, derive expatriateRegionId from it
+  if (data.sectorAdminUnitId) {
+    const sectorAdminUnit = await prisma.sectorAdminUnit.findUnique({
+      where: { id: data.sectorAdminUnitId },
+      select: { expatriateRegionId: true }
+    });
+
+    if (!sectorAdminUnit) {
+      throw new Error('Invalid sector admin unit ID');
+    }
+
+    // Use the parent's expatriateRegionId to prevent drift
+    expatriateRegionId = sectorAdminUnit.expatriateRegionId;
+
+    // Reject if caller tries to override with conflicting value
+    if (data.expatriateRegionId && data.expatriateRegionId !== expatriateRegionId) {
+      throw new Error('Expatriate region ID conflicts with parent sector admin unit');
+    }
+  } else if (expatriateRegionId) {
+    // Verify expatriate region exists if directly specified
+    const expatriateRegion = await prisma.expatriateRegion.findUnique({
+      where: { id: expatriateRegionId }
+    });
+
+    if (!expatriateRegion) {
+      throw new Error('Invalid expatriate region ID');
+    }
+  }
+
+  const normalizedCode = typeof data.code === 'string' && data.code.trim().length > 0
+    ? data.code.trim().toUpperCase()
+    : undefined;
+
+  const normalizedDescription = typeof data.description === 'string' && data.description.trim().length > 0
+    ? data.description.trim()
+    : undefined;
+
   return await prisma.sectorDistrict.create({
     data: {
-      name: data.name,
-      code: data.code,
+      name: trimmedName,
+      code: normalizedCode,
       sectorType: data.sectorType,
-      description: data.description,
-      sectorAdminUnitId: data.sectorAdminUnitId,
-      expatriateRegionId: data.expatriateRegionId,
+      description: normalizedDescription,
+      sectorAdminUnitId: data.sectorAdminUnitId || null,
+      expatriateRegionId: expatriateRegionId || null,
       active: data.active !== undefined ? data.active : true
     }
   });

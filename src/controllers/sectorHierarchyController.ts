@@ -35,6 +35,18 @@ export const createSectorNationalLevel = async (req: AuthenticatedRequest, res: 
     const level = await sectorHierarchyService.createSectorNationalLevel(req.body);
     res.status(201).json(level);
   } catch (error: any) {
+    if (error.message && (error.message.includes('required') || error.message.includes('Invalid'))) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A sector national level with this code already exists' });
+      return;
+    }
+    if (error.code === 'P2003') {
+      res.status(400).json({ error: 'Invalid expatriate region ID' });
+      return;
+    }
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -95,6 +107,14 @@ export const createSectorRegion = async (req: AuthenticatedRequest, res: Respons
     const region = await sectorHierarchyService.createSectorRegion(req.body);
     res.status(201).json(region);
   } catch (error: any) {
+    if (error.message && (error.message.includes('required') || error.message.includes('Invalid') || error.message.includes('conflicts'))) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A sector region with this code already exists' });
+      return;
+    }
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -155,6 +175,14 @@ export const createSectorLocality = async (req: AuthenticatedRequest, res: Respo
     const locality = await sectorHierarchyService.createSectorLocality(req.body);
     res.status(201).json(locality);
   } catch (error: any) {
+    if (error.message && (error.message.includes('required') || error.message.includes('Invalid') || error.message.includes('conflicts'))) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A sector locality with this code already exists' });
+      return;
+    }
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -215,6 +243,14 @@ export const createSectorAdminUnit = async (req: AuthenticatedRequest, res: Resp
     const adminUnit = await sectorHierarchyService.createSectorAdminUnit(req.body);
     res.status(201).json(adminUnit);
   } catch (error: any) {
+    if (error.message && (error.message.includes('required') || error.message.includes('Invalid') || error.message.includes('conflicts'))) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A sector admin unit with this code already exists' });
+      return;
+    }
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -275,6 +311,14 @@ export const createSectorDistrict = async (req: AuthenticatedRequest, res: Respo
     const district = await sectorHierarchyService.createSectorDistrict(req.body);
     res.status(201).json(district);
   } catch (error: any) {
+    if (error.message && (error.message.includes('required') || error.message.includes('Invalid') || error.message.includes('conflicts'))) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A sector district with this code already exists' });
+      return;
+    }
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
 };
