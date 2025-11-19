@@ -63,14 +63,41 @@ export const getHierarchyOverview = async (_req: AuthenticatedRequest, res: Resp
   }
 };
 
+// Helper function to get or create default national level
+async function getOrCreateDefaultNationalLevel() {
+  let nationalLevel = await prisma.nationalLevel.findFirst({
+    where: { active: true }
+  });
+  
+  if (!nationalLevel) {
+    nationalLevel = await prisma.nationalLevel.create({
+      data: {
+        name: 'المستوى القومي',
+        code: 'NATIONAL',
+        description: 'المستوى القومي الأعلى',
+        active: true
+      }
+    });
+  }
+  
+  return nationalLevel;
+}
+
 // Bulk operations for regions
 export const bulkCreateRegions = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
-    const { regions } = req.body;
+    const { regions, nationalLevelId } = req.body;
     
     if (!Array.isArray(regions) || regions.length === 0) {
       res.status(400).json({ error: 'Invalid regions data. Expected non-empty array.' });
       return;
+    }
+    
+    // Get or create default national level if not provided
+    let targetNationalLevelId = nationalLevelId;
+    if (!targetNationalLevelId) {
+      const defaultNationalLevel = await getOrCreateDefaultNationalLevel();
+      targetNationalLevelId = defaultNationalLevel.id;
     }
     
     const createdRegions = await prisma.$transaction(
@@ -80,7 +107,8 @@ export const bulkCreateRegions = async (req: AuthenticatedRequest, res: Response
             name: region.name,
             code: region.code,
             description: region.description,
-            active: region.active !== undefined ? region.active : true
+            active: region.active !== undefined ? region.active : true,
+            nationalLevelId: targetNationalLevelId
           }
         })
       )
@@ -277,12 +305,16 @@ async function processHierarchyImport(data: any): Promise<any> {
       
       // Create region if it doesn't exist
       if (!regionEntity) {
+        // Get or create default national level
+        const defaultNationalLevel = await getOrCreateDefaultNationalLevel();
+        
         regionEntity = await prisma.region.create({
           data: {
             name: region.name,
             code: region.code,
             description: region.description,
-            active: region.active !== undefined ? region.active : true
+            active: region.active !== undefined ? region.active : true,
+            nationalLevelId: region.nationalLevelId || defaultNationalLevel.id
           }
         });
         results.regions.push(regionEntity);

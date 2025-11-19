@@ -254,10 +254,30 @@ export const getDistrictsByAdminUnit = async (req: AuthenticatedRequest, res: Re
   }
 };
 
+// Helper function to get or create default national level
+async function getOrCreateDefaultNationalLevel() {
+  let nationalLevel = await prisma.nationalLevel.findFirst({
+    where: { active: true }
+  });
+  
+  if (!nationalLevel) {
+    nationalLevel = await prisma.nationalLevel.create({
+      data: {
+        name: 'المستوى القومي',
+        code: 'NATIONAL',
+        description: 'المستوى القومي الأعلى',
+        active: true
+      }
+    });
+  }
+  
+  return nationalLevel;
+}
+
 // Create new region
 export const createRegion = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
-    const { name, code, description } = req.body;
+    const { name, code, description, nationalLevelId } = req.body;
     
     if (!name) {
       res.status(400).json({ error: 'Region name is required' });
@@ -275,12 +295,20 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
       }
     }
     
+    // Get or create default national level if not provided
+    let targetNationalLevelId = nationalLevelId;
+    if (!targetNationalLevelId) {
+      const defaultNationalLevel = await getOrCreateDefaultNationalLevel();
+      targetNationalLevelId = defaultNationalLevel.id;
+    }
+    
     const region = await prisma.region.create({
       data: {
         name,
         code,
         description,
-        active: true
+        active: true,
+        nationalLevelId: targetNationalLevelId
       }
     });
     
