@@ -873,25 +873,20 @@ async function fixOrphanedRegions() {
     });
   }
   
-  // Find all regions without a national level parent
-  const orphanedRegions = await prisma.region.findMany({
-    where: {
-      nationalLevelId: null
-    }
-  });
+  // Find all regions without a national level parent using raw query (to bypass strict typing)
+  const orphanedRegions = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "Region" WHERE "nationalLevelId" IS NULL
+  `;
   
   if (orphanedRegions.length > 0) {
     console.log(`  Found ${orphanedRegions.length} orphaned regions, fixing...`);
     
     // Update all orphaned regions to have the default national level
-    await prisma.region.updateMany({
-      where: {
-        nationalLevelId: null
-      },
-      data: {
-        nationalLevelId: nationalLevel.id
-      }
-    });
+    await prisma.$executeRaw`
+      UPDATE "Region"
+      SET "nationalLevelId" = ${nationalLevel.id}
+      WHERE "nationalLevelId" IS NULL
+    `;
     
     console.log(`  ✅ Fixed ${orphanedRegions.length} orphaned regions`);
   } else {
