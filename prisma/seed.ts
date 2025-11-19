@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -97,18 +97,51 @@ async function createUsers() {
 async function createGeographicalHierarchy() {
   console.log('\n🌍 Creating geographical hierarchy...');
   
-  // 1. Create National Level (top level - no parent)
-  const nationalLevel = await prisma.nationalLevel.upsert({
-    where: { code: 'NATIONAL' },
-    update: {},
-    create: {
-      name: 'المستوى القومي',
-      code: 'NATIONAL',
-      description: 'المستوى القومي الأعلى',
-      active: true
-    }
+  // 1. Create or update National Level (top level - no parent)
+  // First, try to find existing NationalLevel by code
+  let nationalLevel = await prisma.nationalLevel.findUnique({
+    where: { code: 'NATIONAL' }
   });
-  console.log('✅ National Level created:', nationalLevel.name);
+  
+  // If not found by code, check if any NationalLevel exists (might have NULL code)
+  if (!nationalLevel) {
+    const existingNationalLevel = await prisma.nationalLevel.findFirst();
+    if (existingNationalLevel) {
+      // Update existing one to have the correct code and details
+      nationalLevel = await prisma.nationalLevel.update({
+        where: { id: existingNationalLevel.id },
+        data: {
+          name: 'المستوى القومي',
+          code: 'NATIONAL',
+          description: 'المستوى القومي الأعلى',
+          active: true
+        }
+      });
+      console.log('✅ National Level updated:', nationalLevel.name);
+    } else {
+      // Create new NationalLevel
+      nationalLevel = await prisma.nationalLevel.create({
+        data: {
+          name: 'المستوى القومي',
+          code: 'NATIONAL',
+          description: 'المستوى القومي الأعلى',
+          active: true
+        }
+      });
+      console.log('✅ National Level created:', nationalLevel.name);
+    }
+  } else {
+    // Update existing one to ensure correct details
+    nationalLevel = await prisma.nationalLevel.update({
+      where: { id: nationalLevel.id },
+      data: {
+        name: 'المستوى القومي',
+        description: 'المستوى القومي الأعلى',
+        active: true
+      }
+    });
+    console.log('✅ National Level found and updated:', nationalLevel.name);
+  }
   
   // 2. Create Regions (MUST belong to NationalLevel)
   const sudanData = [
@@ -176,7 +209,7 @@ async function createGeographicalHierarchy() {
     }
   ];
 
-  const createdRegions = [];
+  const createdRegions: Region[] = [];
   
   for (const stateData of sudanData) {
     console.log(`  Creating region: ${stateData.name}`);
@@ -288,7 +321,7 @@ async function createExpatriateHierarchy() {
     'قطاع امريكا الجنوبية'
   ];
 
-  const expatriateRegions = [];
+  const expatriateRegions: ExpatriateRegion[] = [];
   for (let i = 0; i < expatriateRegionNames.length; i++) {
     const name = expatriateRegionNames[i];
     const code = `EXPAT-${i + 1}`;
@@ -318,7 +351,7 @@ async function createExpatriateHierarchy() {
     POLITICAL: 'السياسي'
   };
 
-  const sectorNationalLevels = [];
+  const sectorNationalLevels: SectorNationalLevel[] = [];
   
   // Create sector national levels for each expatriate region
   for (const expatriateRegion of expatriateRegions) {
@@ -345,7 +378,7 @@ async function createExpatriateHierarchy() {
 
   // 3. Create Sector Regions (MUST belong to SectorNationalLevel OR ExpatriateRegion)
   // For this seed, we'll create them under SectorNationalLevel
-  const sectorRegions = [];
+  const sectorRegions: SectorRegion[] = [];
   for (const sectorNationalLevel of sectorNationalLevels.slice(0, 4)) { // Sample: first 4
     const sectorRegion = await prisma.sectorRegion.upsert({
       where: {
@@ -369,7 +402,7 @@ async function createExpatriateHierarchy() {
   console.log(`✅ Created ${sectorRegions.length} sector regions`);
 
   // 4. Create Sector Localities (MUST belong to SectorRegion OR ExpatriateRegion)
-  const sectorLocalities = [];
+  const sectorLocalities: SectorLocality[] = [];
   for (const sectorRegion of sectorRegions.slice(0, 2)) { // Sample: first 2
     const sectorLocality = await prisma.sectorLocality.upsert({
       where: {
@@ -393,7 +426,7 @@ async function createExpatriateHierarchy() {
   console.log(`✅ Created ${sectorLocalities.length} sector localities`);
 
   // 5. Create Sector Admin Units (MUST belong to SectorLocality OR ExpatriateRegion)
-  const sectorAdminUnits = [];
+  const sectorAdminUnits: SectorAdminUnit[] = [];
   for (const sectorLocality of sectorLocalities.slice(0, 1)) { // Sample: first 1
     const sectorAdminUnit = await prisma.sectorAdminUnit.upsert({
       where: {
@@ -417,7 +450,7 @@ async function createExpatriateHierarchy() {
   console.log(`✅ Created ${sectorAdminUnits.length} sector admin units`);
 
   // 6. Create Sector Districts (MUST belong to SectorAdminUnit OR ExpatriateRegion)
-  const sectorDistricts = [];
+  const sectorDistricts: SectorDistrict[] = [];
   for (const sectorAdminUnit of sectorAdminUnits) {
     const sectorDistrict = await prisma.sectorDistrict.upsert({
       where: {

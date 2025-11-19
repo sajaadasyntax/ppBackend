@@ -773,19 +773,37 @@ export const getNationalLevelById = async (req: AuthenticatedRequest, res: Respo
 export const createNationalLevel = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { name, code, description, active } = req.body;
-    
+
+    const trimmedName = typeof name === 'string' ? name.trim() : '';
+    if (!trimmedName) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    const normalizedCode = typeof code === 'string' && code.trim().length > 0
+      ? code.trim().toUpperCase()
+      : undefined;
+
+    const normalizedDescription = typeof description === 'string' && description.trim().length > 0
+      ? description.trim()
+      : undefined;
+
     const nationalLevel = await prisma.nationalLevel.create({
       data: {
-        name,
-        code,
-        description,
-        active: active !== undefined ? active : true
+        name: trimmedName,
+        code: normalizedCode,
+        description: normalizedDescription,
+        active: typeof active === 'boolean' ? active : true
       }
     });
     
     res.status(201).json(nationalLevel);
   } catch (error: any) {
     console.error('Error creating national level:', error);
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'A national level with this code already exists' });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 };
