@@ -32,6 +32,8 @@ import prisma from './utils/prisma';
 const app: Express = express();
 const server = createServer(app);
 
+const enableVerboseLogging = process.env.NODE_ENV !== 'production';
+
 // CORS configuration - Allow specific origins with credentials
 const allowedOrigins: string[] = [
   'https://ppsudan.org',
@@ -77,18 +79,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // Log basic request info
   console.log(`[${requestId}] ${new Date().toISOString()} ${req.method} ${req.url}`);
   
-  // Log request headers and body for non-GET requests (excluding file uploads)
-  if (req.method !== 'GET') {
+  // Log request headers for debugging authentication issues
+  if (req.url.includes('/auth/')) {
+    console.log(`[${requestId}] Auth request headers:`, req.headers);
+  }
+  
+  // Log request body only in non-production environments to avoid leaking sensitive data
+  if (enableVerboseLogging && req.method !== 'GET') {
     if (req.headers['content-type'] && !req.headers['content-type']?.includes('multipart/form-data')) {
       console.log(`[${requestId}] Request Body:`, req.body);
     } else {
       console.log(`[${requestId}] Request with multipart form data or binary content`);
     }
-  }
-  
-  // Log request headers for debugging authentication issues
-  if (req.url.includes('/auth/')) {
-    console.log(`[${requestId}] Auth request headers:`, req.headers);
   }
   
   // Intercept and log the response
@@ -99,8 +101,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     // Log response status and time
     console.log(`[${requestId}] Response ${res.statusCode} (${duration}ms)`);
     
-    // For error responses or auth endpoints, log more details
-    if (res.statusCode >= 400 || req.url.includes('/auth/')) {
+    // For error responses or auth endpoints, log more details (non-production logging avoids body content)
+    if (enableVerboseLogging && (res.statusCode >= 400 || req.url.includes('/auth/'))) {
       try {
         // Only parse and log if it's JSON and not a file
         if (typeof body === 'string' && body.startsWith('{')) {
@@ -117,6 +119,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
         // Not JSON or can't be parsed
         console.log(`[${requestId}] Non-JSON response or parse error`);
       }
+    } else if (!enableVerboseLogging && res.statusCode >= 500) {
+      console.log(`[${requestId}] Response body omitted (status ${res.statusCode})`);
     }
     
     // Call the original send method
