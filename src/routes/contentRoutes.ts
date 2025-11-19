@@ -32,14 +32,14 @@ router.use(authenticate);
 // Bulletins routes - using the fixed bulletin controller
 router.get('/bulletins', bulletinController.getBulletins);
 router.get('/bulletins/hierarchical', bulletinController.getBulletins); // Added this endpoint for mobile app
-router.post('/bulletins', bulletinController.createBulletin);
-router.put('/bulletins/:id', bulletinController.updateBulletin);
-router.delete('/bulletins/:id', bulletinController.deleteBulletin);
+router.post('/bulletins', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), bulletinController.createBulletin);
+router.put('/bulletins/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), bulletinController.updateBulletin);
+router.delete('/bulletins/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), bulletinController.deleteBulletin);
 
 // Archive routes
 router.get('/archive', contentController.getArchiveDocuments);
-router.post('/archive/upload', contentController.uploadArchiveDocument);
-router.delete('/archive/:id', contentController.deleteArchiveDocument);
+router.post('/archive/upload', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.uploadArchiveDocument);
+router.delete('/archive/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.deleteArchiveDocument);
 
 // Surveys routes
 router.get('/surveys', contentController.getSurveys);
@@ -47,13 +47,13 @@ router.get('/surveys/public', contentController.getPublicSurveys);
 router.get('/surveys/public/hierarchical', contentController.getPublicSurveys); // Hierarchical endpoint for mobile
 router.get('/surveys/member', contentController.getMemberSurveys);
 router.get('/surveys/member/hierarchical', contentController.getMemberSurveys); // Hierarchical endpoint for mobile
-router.post('/surveys', contentController.createSurvey);
+router.post('/surveys', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.createSurvey);
 router.post('/surveys/:id/respond', contentController.submitSurveyResponse);
 
 // Voting routes
 router.get('/voting', contentController.getVotingItems);
 router.get('/voting/hierarchical', contentController.getVotingItems); // Hierarchical endpoint for mobile
-router.post('/voting', contentController.createVotingItem);
+router.post('/voting', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.createVotingItem);
 router.post('/voting/:id/vote', contentController.submitVote);
 
 // Subscriptions routes
@@ -61,12 +61,12 @@ router.get('/subscriptions/active', contentController.getActiveSubscriptions);
 router.get('/subscriptions/previous', contentController.getPreviousSubscriptions);
 router.post('/subscriptions/subscribe', contentController.subscribe);
 
-// Reports routes
+// Reports routes - users can submit, admins can view all
 router.post('/reports', contentController.submitReport);
 router.get('/reports/user', contentController.getUserReports);
-router.get('/reports', contentController.getAllReports);
-router.get('/reports/:id', contentController.getReportById);
-router.get('/reports/:id/attachments/:filename', contentController.getReportAttachment);
+router.get('/reports', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.getAllReports);
+router.get('/reports/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.getReportById);
+router.get('/reports/:id/attachments/:filename', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.getReportAttachment);
 
 // Hierarchy routes
 router.get('/hierarchy/targeting-options', contentController.getHierarchyTargetingOptions);

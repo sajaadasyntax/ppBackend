@@ -62,8 +62,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('========= LOGIN ATTEMPT =========');
-    console.log('Login request received:', req.body);
-    console.log('Request headers:', req.headers);
     console.log('Client IP:', req.ip);
     
     const { mobileNumber, password } = req.body;
@@ -75,13 +73,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
     
-    console.log(`Login attempt with mobile number: ${mobileNumber}, password: ${password}`);
-    
     // Normalize mobile number to E.164 format
     let normalizedMobile: string;
     try {
       normalizedMobile = normalizeMobileNumber(mobileNumber);
-      console.log(`Normalized mobile number: ${normalizedMobile}`);
+      console.log(`Login attempt for normalized mobile: ${normalizedMobile.substring(0, 7)}***`);
     } catch (error: any) {
       console.log('Invalid mobile number format:', error.message);
       res.status(400).json({ error: 'Invalid mobile number format' });
@@ -92,18 +88,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     let user = await userService.getUserByMobileNumber(normalizedMobile);
     
     if (!user) {
-      console.log('User not found by mobile number:', mobileNumber);
+      console.log('User not found for mobile number');
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }
-    
-    // Debug user found
-    console.log('User found:', { 
-      id: user.id, 
-      email: user.email, 
-      role: user.role,
-      hashedPassword: user.password ? user.password.substring(0, 10) + '...' : 'not set'
-    });
     
     // Block login if profile is not active
     const status = (user as any).profile?.status || 'active';
@@ -114,9 +102,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Check password
     try {
-      console.log(`Comparing password "${password}" with hash "${user.password}"`);
       const isPasswordValid = await bcrypt.compare(password, user.password);
-      console.log('Password valid?', isPasswordValid);
       
       if (!isPasswordValid) {
         console.log('Invalid password for user:', user.email);

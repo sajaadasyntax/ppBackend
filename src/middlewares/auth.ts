@@ -3,49 +3,29 @@ import { verifyAccessToken } from '../utils/auth';
 import { AuthenticatedRequest } from '../types';
 
 export const authenticate = (req: Request, res: Response, next: NextFunction): void => {
-  console.log('🔐 Authentication middleware called');
-  console.log('📝 Request URL:', req.url);
-  console.log('📋 Request headers:', JSON.stringify(req.headers));
-  
   // Get the token from headers
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log('❌ No token provided in headers');
     res.status(401).json({ error: 'Unauthorized - No token provided' });
     return;
   }
 
   // Extract token
   const token = authHeader.split(' ')[1];
-  console.log('🔑 Token extracted from headers:', token.substring(0, 20) + '...');
   
   // Verify token
   const decoded = verifyAccessToken(token);
   if (!decoded) {
-    console.log('❌ Token verification failed');
     res.status(401).json({ error: 'Unauthorized - Invalid token' });
     return;
   }
-  
-  // Print detailed user info
-  console.log('✅ Token verified successfully, user:', JSON.stringify({
-    id: decoded.id,
-    email: decoded.email,
-    adminLevel: decoded.adminLevel,
-    role: decoded.role,
-    nationalLevelId: decoded.nationalLevelId,
-    regionId: decoded.regionId,
-    localityId: decoded.localityId,
-    adminUnitId: decoded.adminUnitId,
-    districtId: decoded.districtId
-  }, null, 2));
   
   // Set user on request object
   (req as AuthenticatedRequest).user = decoded;
   next();
 };
 
-// Check if user has required role (legacy support)
+// Check if user has required role (checks both role and adminLevel)
 export const authorize = (roles: string | string[] = []) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     const authReq = req as AuthenticatedRequest;
@@ -59,13 +39,29 @@ export const authorize = (roles: string | string[] = []) => {
     // If roles not provided as array, make it an array
     const rolesArray = Array.isArray(roles) ? roles : [roles];
 
-    // Check if user has required role
-    if (rolesArray.length && !rolesArray.includes(authReq.user.role)) {
-      res.status(403).json({ error: 'Forbidden - Insufficient permissions' });
+    // If no roles specified, allow any authenticated user
+    if (rolesArray.length === 0) {
+      next();
       return;
     }
 
-    next();
+    // ADMIN and GENERAL_SECRETARIAT have access to everything
+    if (authReq.user.adminLevel === 'ADMIN' || authReq.user.role === 'ADMIN' ||
+        authReq.user.adminLevel === 'GENERAL_SECRETARIAT' || authReq.user.role === 'GENERAL_SECRETARIAT') {
+      next();
+      return;
+    }
+
+    // Check if user has required role or adminLevel
+    const userRole = authReq.user.role;
+    const userAdminLevel = authReq.user.adminLevel;
+    
+    if (rolesArray.includes(userRole) || rolesArray.includes(userAdminLevel)) {
+      next();
+      return;
+    }
+
+    res.status(403).json({ error: 'Forbidden - Insufficient permissions' });
   };
 };
 

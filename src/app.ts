@@ -51,7 +51,7 @@ const corsOptions: cors.CorsOptions = {
       callback(null, true);
     } else {
       console.log(`Blocked origin: ${origin}`);
-      callback(null, true); // Still allow but log it
+      callback(new Error('Not allowed by CORS'), false);
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],

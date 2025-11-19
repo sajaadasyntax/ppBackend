@@ -38,6 +38,7 @@ router.get('/hierarchy', async (_req: Request, res: Response) => {
 });
 
 // Public member signup (unauthenticated). Creates a USER account, disabled until admin activation
+// TODO: Add rate limiting and CAPTCHA protection to prevent abuse
 router.post('/signup-member', userController.createMember);
 
 export default router;
