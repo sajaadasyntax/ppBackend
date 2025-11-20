@@ -993,44 +993,57 @@ export const getAvailableAdmins = async (req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    // Determine which admin level is appropriate for this hierarchy level
-    let requiredAdminLevel: AdminLevel;
-    let whereClause: any = {
-      role: 'ADMIN', // Only users with ADMIN role can be assigned as hierarchy admins
-    };
+    // Build where clause - any user can potentially be assigned as admin
+    let whereClause: any = {};
 
     switch (level) {
       case 'national':
-        requiredAdminLevel = 'NATIONAL_LEVEL' as AdminLevel;
+      case 'nationalLevel':
+        // Users at national level or root admins
+        whereClause.OR = [
+          { nationalLevelId: hierarchyId ? (hierarchyId as string) : { not: null } },
+          { adminLevel: 'GENERAL_SECRETARIAT' },
+          { adminLevel: 'ADMIN' }
+        ];
         break;
+        
       case 'region':
-        requiredAdminLevel = 'REGION' as AdminLevel;
         if (hierarchyId) {
-          // Get region's national level
+          // Get region's national level to find users in that national level or region
           const region = await prisma.region.findUnique({
             where: { id: hierarchyId as string },
             select: { nationalLevelId: true }
           });
-          if (region) {
-            whereClause.nationalLevelId = region.nationalLevelId;
+          if (region?.nationalLevelId) {
+            whereClause.OR = [
+              { nationalLevelId: region.nationalLevelId },
+              { regionId: hierarchyId as string },
+              { adminLevel: 'GENERAL_SECRETARIAT' },
+              { adminLevel: 'ADMIN' }
+            ];
           }
         }
         break;
+        
       case 'locality':
-        requiredAdminLevel = 'LOCALITY' as AdminLevel;
         if (hierarchyId) {
-          // Get locality's region
+          // Get locality's region to find users in that region or locality
           const locality = await prisma.locality.findUnique({
             where: { id: hierarchyId as string },
             select: { regionId: true }
           });
           if (locality) {
-            whereClause.regionId = locality.regionId;
+            whereClause.OR = [
+              { regionId: locality.regionId },
+              { localityId: hierarchyId as string },
+              { adminLevel: 'GENERAL_SECRETARIAT' },
+              { adminLevel: 'ADMIN' }
+            ];
           }
         }
         break;
+        
       case 'adminUnit':
-        requiredAdminLevel = 'ADMIN_UNIT' as AdminLevel;
         if (hierarchyId) {
           // Get admin unit's locality
           const adminUnit = await prisma.adminUnit.findUnique({
@@ -1038,12 +1051,17 @@ export const getAvailableAdmins = async (req: AuthenticatedRequest, res: Respons
             select: { localityId: true }
           });
           if (adminUnit) {
-            whereClause.localityId = adminUnit.localityId;
+            whereClause.OR = [
+              { localityId: adminUnit.localityId },
+              { adminUnitId: hierarchyId as string },
+              { adminLevel: 'GENERAL_SECRETARIAT' },
+              { adminLevel: 'ADMIN' }
+            ];
           }
         }
         break;
+        
       case 'district':
-        requiredAdminLevel = 'DISTRICT' as AdminLevel;
         if (hierarchyId) {
           // Get district's admin unit
           const district = await prisma.district.findUnique({
@@ -1051,21 +1069,30 @@ export const getAvailableAdmins = async (req: AuthenticatedRequest, res: Respons
             select: { adminUnitId: true }
           });
           if (district) {
-            whereClause.adminUnitId = district.adminUnitId;
+            whereClause.OR = [
+              { adminUnitId: district.adminUnitId },
+              { districtId: hierarchyId as string },
+              { adminLevel: 'GENERAL_SECRETARIAT' },
+              { adminLevel: 'ADMIN' }
+            ];
           }
         }
         break;
+        
+      case 'expatriateRegion':
+        // Users in expatriate regions or root admins
+        whereClause.OR = [
+          { expatriateRegionId: hierarchyId ? (hierarchyId as string) : { not: null } },
+          { adminLevel: 'EXPATRIATE_GENERAL' },
+          { adminLevel: 'GENERAL_SECRETARIAT' },
+          { adminLevel: 'ADMIN' }
+        ];
+        break;
+        
       default:
         res.status(400).json({ error: 'Invalid level parameter' });
         return;
     }
-
-    // Also include users with matching adminLevel or GENERAL_SECRETARIAT/ADMIN
-    whereClause.OR = [
-      { adminLevel: requiredAdminLevel },
-      { adminLevel: 'GENERAL_SECRETARIAT' },
-      { adminLevel: 'ADMIN' }
-    ];
 
     const users = await prisma.user.findMany({
       where: whereClause,
