@@ -2,6 +2,40 @@ import { Response, NextFunction } from 'express';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../types';
 
+interface UserDisplayInfo {
+  id: string;
+  email: string | null;
+  mobileNumber: string;
+  adminLevel?: string | null;
+  profile?: {
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+  memberDetails?: {
+    fullName?: string | null;
+  } | null;
+}
+
+const getUserDisplayName = (user?: UserDisplayInfo | null): string => {
+  if (!user) return 'غير معروف';
+
+  const firstName = user.profile?.firstName?.trim();
+  const lastName = user.profile?.lastName?.trim();
+  if (firstName && lastName) {
+    return `${firstName} ${lastName}`.trim();
+  }
+
+  if (user.memberDetails?.fullName?.trim()) {
+    return user.memberDetails.fullName.trim();
+  }
+
+  if (user.email) {
+    return user.email;
+  }
+
+  return user.mobileNumber;
+};
+
 // Get all deletion requests (root admin only)
 export const getAllDeletionRequests = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
@@ -19,8 +53,15 @@ export const getAllDeletionRequests = async (req: AuthenticatedRequest, res: Res
           select: {
             id: true,
             email: true,
+            mobileNumber: true,
             adminLevel: true,
             profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
               select: {
                 fullName: true
               }
@@ -31,7 +72,14 @@ export const getAllDeletionRequests = async (req: AuthenticatedRequest, res: Res
           select: {
             id: true,
             email: true,
+            mobileNumber: true,
             profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
               select: {
                 fullName: true
               }
@@ -53,16 +101,16 @@ export const getAllDeletionRequests = async (req: AuthenticatedRequest, res: Res
       itemName: req.entityName,
       requestReason: req.reason,
       requestDate: req.createdAt.toISOString(),
-      requestedBy: {
+      requestedBy: req.requestedBy ? {
         id: req.requestedBy.id,
-        name: req.requestedBy.profile?.fullName || req.requestedBy.email,
-        level: req.requestedBy.adminLevel
-      },
+        name: getUserDisplayName(req.requestedBy),
+        level: req.requestedBy.adminLevel || 'USER'
+      } : undefined,
       status: req.status.toLowerCase(),
       actionDate: req.actionDate?.toISOString(),
       actionBy: req.actionBy ? {
         id: req.actionBy.id,
-        name: req.actionBy.profile?.fullName || req.actionBy.email
+        name: getUserDisplayName(req.actionBy)
       } : undefined
     }));
 
@@ -111,8 +159,15 @@ export const createDeletionRequest = async (req: AuthenticatedRequest, res: Resp
           select: {
             id: true,
             email: true,
+            mobileNumber: true,
             adminLevel: true,
             profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
               select: {
                 fullName: true
               }
@@ -132,11 +187,11 @@ export const createDeletionRequest = async (req: AuthenticatedRequest, res: Resp
         itemName: deletionRequest.entityName,
         requestReason: deletionRequest.reason,
         requestDate: deletionRequest.createdAt.toISOString(),
-        requestedBy: {
+        requestedBy: deletionRequest.requestedBy ? {
           id: deletionRequest.requestedBy.id,
-          name: deletionRequest.requestedBy.profile?.fullName || deletionRequest.requestedBy.email,
-          level: deletionRequest.requestedBy.adminLevel
-        },
+          name: getUserDisplayName(deletionRequest.requestedBy),
+          level: deletionRequest.requestedBy.adminLevel || 'USER'
+        } : undefined,
         status: deletionRequest.status.toLowerCase()
       }
     });
