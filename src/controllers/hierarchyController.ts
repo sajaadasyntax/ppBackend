@@ -67,6 +67,24 @@ export const getRegions = async (req: AuthenticatedRequest, res: Response, _next
     const regions = await prisma.region.findMany({
       where: whereClause,
       include: {
+        admin: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
+              select: {
+                fullName: true
+              }
+            }
+          }
+        },
         _count: {
           select: {
             localities: true,
@@ -219,6 +237,33 @@ export const updateRegion = async (req: AuthenticatedRequest, res: Response, _ne
   }
 };
 
+// Update region active status
+export const updateRegionStatus = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { active } = req.body;
+
+    if (typeof active !== 'boolean') {
+      res.status(400).json({ error: 'Active status must be a boolean value' });
+      return;
+    }
+
+    const region = await prisma.region.update({
+      where: { id },
+      data: { active }
+    });
+
+    res.json(region);
+  } catch (error: any) {
+    console.error('Error updating region status:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Region not found' });
+      return;
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Delete region
 export const deleteRegion = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
@@ -248,6 +293,32 @@ export const getLocalitiesByRegion = async (req: AuthenticatedRequest, res: Resp
     const { regionId } = req.params;
     const localities = await prisma.locality.findMany({
       where: { regionId },
+      include: {
+        admin: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
+              select: {
+                fullName: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            adminUnits: true,
+            users: true
+          }
+        }
+      },
       orderBy: { name: 'asc' }
     });
     
@@ -381,6 +452,34 @@ export const updateLocality = async (req: AuthenticatedRequest, res: Response, _
   }
 };
 
+// Update locality active status
+export const updateLocalityStatus = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { active } = req.body;
+
+    if (typeof active !== 'boolean') {
+      res.status(400).json({ error: 'Active status must be a boolean value' });
+      return;
+    }
+
+    const locality = await prisma.locality.update({
+      where: { id },
+      data: { active },
+      include: { region: true }
+    });
+
+    res.json(locality);
+  } catch (error: any) {
+    console.error('Error updating locality status:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Locality not found' });
+      return;
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Delete locality
 export const deleteLocality = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
@@ -410,6 +509,32 @@ export const getAdminUnitsByLocality = async (req: AuthenticatedRequest, res: Re
     const { localityId } = req.params;
     const adminUnits = await prisma.adminUnit.findMany({
       where: { localityId },
+      include: {
+        admin: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
+              select: {
+                fullName: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            districts: true,
+            users: true
+          }
+        }
+      },
       orderBy: { name: 'asc' }
     });
     
@@ -547,6 +672,38 @@ export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, 
   }
 };
 
+// Update admin unit active status
+export const updateAdminUnitStatus = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { active } = req.body;
+
+    if (typeof active !== 'boolean') {
+      res.status(400).json({ error: 'Active status must be a boolean value' });
+      return;
+    }
+
+    const adminUnit = await prisma.adminUnit.update({
+      where: { id },
+      data: { active },
+      include: {
+        locality: {
+          include: { region: true }
+        }
+      }
+    });
+
+    res.json(adminUnit);
+  } catch (error: any) {
+    console.error('Error updating admin unit status:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Administrative unit not found' });
+      return;
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Delete admin unit
 export const deleteAdminUnit = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
@@ -576,6 +733,31 @@ export const getDistrictsByAdminUnit = async (req: AuthenticatedRequest, res: Re
     const { adminUnitId } = req.params;
     const districts = await prisma.district.findMany({
       where: { adminUnitId },
+      include: {
+        admin: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
+              select: {
+                fullName: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            users: true
+          }
+        }
+      },
       orderBy: { name: 'asc' }
     });
     
@@ -716,6 +898,40 @@ export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _
   }
 };
 
+// Update district active status
+export const updateDistrictStatus = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { active } = req.body;
+
+    if (typeof active !== 'boolean') {
+      res.status(400).json({ error: 'Active status must be a boolean value' });
+      return;
+    }
+
+    const district = await prisma.district.update({
+      where: { id },
+      data: { active },
+      include: {
+        adminUnit: {
+          include: {
+            locality: { include: { region: true } }
+          }
+        }
+      }
+    });
+
+    res.json(district);
+  } catch (error: any) {
+    console.error('Error updating district status:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'District not found' });
+      return;
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Delete district
 export const deleteDistrict = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
@@ -843,6 +1059,24 @@ export const getNationalLevels = async (req: AuthenticatedRequest, res: Response
     const nationalLevels = await prisma.nationalLevel.findMany({
       where: whereClause,
       include: {
+        admin: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
+              select: {
+                fullName: true
+              }
+            }
+          }
+        },
         _count: {
           select: { regions: true, users: true }
         }

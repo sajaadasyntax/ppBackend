@@ -2,6 +2,7 @@ import userService from '../services/userService';
 import prisma from '../utils/prisma';
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types';
+import { AdminLevel } from '@prisma/client';
 
 // Get all users with pagination and hierarchical access control
 export const getAllUsers = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
@@ -976,6 +977,134 @@ export const updateActiveHierarchy = async (req: AuthenticatedRequest, res: Resp
     });
   } catch (error: any) {
     console.error('Update active hierarchy error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Get available users who can be assigned as admins for hierarchy levels
+ */
+export const getAvailableAdmins = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { level, hierarchyId } = req.query;
+    
+    if (!level) {
+      res.status(400).json({ error: 'Level parameter is required' });
+      return;
+    }
+
+    // Determine which admin level is appropriate for this hierarchy level
+    let requiredAdminLevel: AdminLevel;
+    let whereClause: any = {
+      role: 'ADMIN', // Only users with ADMIN role can be assigned as hierarchy admins
+    };
+
+    switch (level) {
+      case 'national':
+        requiredAdminLevel = 'NATIONAL_LEVEL' as AdminLevel;
+        break;
+      case 'region':
+        requiredAdminLevel = 'REGION' as AdminLevel;
+        if (hierarchyId) {
+          // Get region's national level
+          const region = await prisma.region.findUnique({
+            where: { id: hierarchyId as string },
+            select: { nationalLevelId: true }
+          });
+          if (region) {
+            whereClause.nationalLevelId = region.nationalLevelId;
+          }
+        }
+        break;
+      case 'locality':
+        requiredAdminLevel = 'LOCALITY' as AdminLevel;
+        if (hierarchyId) {
+          // Get locality's region
+          const locality = await prisma.locality.findUnique({
+            where: { id: hierarchyId as string },
+            select: { regionId: true }
+          });
+          if (locality) {
+            whereClause.regionId = locality.regionId;
+          }
+        }
+        break;
+      case 'adminUnit':
+        requiredAdminLevel = 'ADMIN_UNIT' as AdminLevel;
+        if (hierarchyId) {
+          // Get admin unit's locality
+          const adminUnit = await prisma.adminUnit.findUnique({
+            where: { id: hierarchyId as string },
+            select: { localityId: true }
+          });
+          if (adminUnit) {
+            whereClause.localityId = adminUnit.localityId;
+          }
+        }
+        break;
+      case 'district':
+        requiredAdminLevel = 'DISTRICT' as AdminLevel;
+        if (hierarchyId) {
+          // Get district's admin unit
+          const district = await prisma.district.findUnique({
+            where: { id: hierarchyId as string },
+            select: { adminUnitId: true }
+          });
+          if (district) {
+            whereClause.adminUnitId = district.adminUnitId;
+          }
+        }
+        break;
+      default:
+        res.status(400).json({ error: 'Invalid level parameter' });
+        return;
+    }
+
+    // Also include users with matching adminLevel or GENERAL_SECRETARIAT/ADMIN
+    whereClause.OR = [
+      { adminLevel: requiredAdminLevel },
+      { adminLevel: 'GENERAL_SECRETARIAT' },
+      { adminLevel: 'ADMIN' }
+    ];
+
+    const users = await prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        email: true,
+        mobileNumber: true,
+        adminLevel: true,
+        profile: {
+          select: {
+            firstName: true,
+            lastName: true
+          }
+        },
+        memberDetails: {
+          select: {
+            fullName: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Format the response
+    const formattedUsers = users.map(user => ({
+      id: user.id,
+      name: user.profile?.firstName && user.profile?.lastName 
+        ? `${user.profile.firstName} ${user.profile.lastName}`
+        : user.memberDetails?.fullName || user.email || user.mobileNumber,
+      email: user.email,
+      mobileNumber: user.mobileNumber,
+      adminLevel: user.adminLevel
+    }));
+
+    res.json(formattedUsers);
+  } catch (error: any) {
+    console.error('Get available admins error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

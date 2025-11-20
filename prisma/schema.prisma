@@ -305,6 +305,8 @@ model User {
   sectorRegion                SectorRegion?         @relation(fields: [sectorRegionId], references: [id])
   votes                       Vote[]
   votingItems                 VotingItem[]
+  deletionRequestsCreated     DeletionRequest[]     @relation("DeletionRequestCreator")
+  deletionRequestsApproved    DeletionRequest[]     @relation("DeletionRequestApprover")
 
   @@index([mobileNumber])
 }
@@ -664,6 +666,40 @@ model ChatMessage {
 
   @@index([roomId, createdAt])
   @@index([senderId])
+}
+
+model DeletionRequest {
+  id             String                 @id @default(uuid())
+  entityType     DeletionEntityType
+  entityId       String
+  entityName     String
+  reason         String
+  status         DeletionRequestStatus  @default(PENDING)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  actionDate     DateTime?
+  requestedById  String
+  actionById     String?
+  
+  requestedBy    User                   @relation("DeletionRequestCreator", fields: [requestedById], references: [id])
+  actionBy       User?                  @relation("DeletionRequestApprover", fields: [actionById], references: [id])
+  
+  @@index([status])
+  @@index([requestedById])
+  @@index([createdAt])
+}
+
+enum DeletionEntityType {
+  REGION
+  LOCALITY
+  ADMIN_UNIT
+  DISTRICT
+}
+
+enum DeletionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum AdminLevel {

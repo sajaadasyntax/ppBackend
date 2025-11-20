@@ -19,6 +19,7 @@ router.get('/regions', hierarchyController.getRegions);
 router.get('/regions/:id', hierarchyController.getRegionById);
 router.post('/regions', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.createRegion);
 router.put('/regions/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.updateRegion);
+router.patch('/regions/:id/status', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.updateRegionStatus);
 router.delete('/regions/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.deleteRegion);
 
 // Locality routes
@@ -27,6 +28,7 @@ router.post('/regions/:regionId/localities', authorizeRoles(['ADMIN', 'GENERAL_S
 router.get('/localities/:id', hierarchyController.getLocalityById);
 router.post('/localities', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.createLocality);
 router.put('/localities/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.updateLocality);
+router.patch('/localities/:id/status', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.updateLocalityStatus);
 router.delete('/localities/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.deleteLocality);
 
 // Administrative Unit routes
@@ -35,6 +37,7 @@ router.post('/localities/:localityId/admin-units', authorizeRoles(['ADMIN', 'GEN
 router.get('/admin-units/:id', hierarchyController.getAdminUnitById);
 router.post('/admin-units', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.createAdminUnit);
 router.put('/admin-units/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.updateAdminUnit);
+router.patch('/admin-units/:id/status', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.updateAdminUnitStatus);
 router.delete('/admin-units/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.deleteAdminUnit);
 
 // District routes
@@ -43,6 +46,7 @@ router.post('/admin-units/:adminUnitId/districts', authorizeRoles(['ADMIN', 'GEN
 router.get('/districts/:id', hierarchyController.getDistrictById);
 router.post('/districts', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.createDistrict);
 router.put('/districts/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.updateDistrict);
+router.patch('/districts/:id/status', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.updateDistrictStatus);
 router.delete('/districts/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.deleteDistrict);
 
 // Full hierarchy route

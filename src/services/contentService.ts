@@ -578,116 +578,9 @@ export const getSurveys = async (userId: string, adminUser: any = null): Promise
 // Get public surveys
 export const getPublicSurveys = async (userId: string, adminUser: any = null): Promise<any[]> => {
   try {
-    // Start with basic filter for public surveys
-    let whereClause: any = { 
-        published: true,
-        audience: 'public'
-    };
-    
-    // Apply hierarchical access control if adminUser is provided
-    if (adminUser) {
-      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
-      
-      console.log("User hierarchy info for public surveys:", { adminLevel, regionId, localityId, adminUnitId, districtId });
-      
-      switch (adminLevel) {
-        case 'GENERAL_SECRETARIAT':
-        case 'ADMIN':
-          // General Secretariat and Admin can see all public surveys
-          console.log("Admin/General Secretariat user - showing all public surveys");
-          break;
-          
-        default:
-          // For all other users, apply direct ID comparison filtering
-          console.log("Applying hierarchical filtering for public surveys");
-          
-          // Start with an empty OR array
-          const hierarchyFilter: any[] = [];
-          
-          // Add conditions based on user's hierarchy level
-          if (regionId) {
-            // Region-level surveys (where regionId matches AND lower levels are not targeted)
-            hierarchyFilter.push({
-              targetRegionId: regionId,
-              AND: [
-                {
-                  OR: [
-                    { targetLocalityId: null },
-                    { targetLocalityId: localityId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add locality-level surveys only if user has a locality
-          if (localityId) {
-            hierarchyFilter.push({
-              targetLocalityId: localityId,
-              AND: [
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add admin unit-level surveys only if user has an admin unit
-          if (adminUnitId) {
-            hierarchyFilter.push({
-              targetAdminUnitId: adminUnitId,
-              AND: [
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add district-level surveys only if user has a district
-          if (districtId) {
-            hierarchyFilter.push({
-              targetDistrictId: districtId
-            });
-          }
-          
-          // If hierarchy filters were added, include them in the where clause
-          if (hierarchyFilter.length > 0) {
-            whereClause.OR = hierarchyFilter;
-          } else {
-            whereClause.id = 'none'; // This will return no results
-            console.log("No hierarchy information available for user, returning no public surveys");
-          }
-          
-          console.log("Final public surveys filter criteria:", JSON.stringify(whereClause, null, 2));
-      }
-    }
-    
-    // Fetch public surveys with hierarchical filtering
+    const baseClause = adminUser ? await buildContentWhereClause(adminUser) : { published: true };
+    const whereClause = { ...baseClause, audience: 'public' };
+
     const surveys = await prisma.survey.findMany({
       where: whereClause,
       orderBy: { dueDate: 'asc' },
@@ -700,8 +593,7 @@ export const getPublicSurveys = async (userId: string, adminUser: any = null): P
     });
 
     console.log(`Found ${surveys.length} public surveys matching criteria`);
-    
-    // Transform data to match expected format
+
     return surveys.map(survey => {
       const isCompleted = survey.responses.length > 0;
       const questions = JSON.parse(survey.questions);
@@ -715,15 +607,21 @@ export const getPublicSurveys = async (userId: string, adminUser: any = null): P
         questions: questions,
         questionsCount: questionsCount,
         isCompleted,
-        // Add fields to match web schema
         participants: Math.floor(Math.random() * 100) + 20,
         type: survey.audience || 'public',
         audience: survey.audience || 'public',
-        // Add hierarchy information
+        targetNationalLevelId: survey.targetNationalLevelId,
         targetRegionId: survey.targetRegionId,
         targetLocalityId: survey.targetLocalityId,
         targetAdminUnitId: survey.targetAdminUnitId,
-        targetDistrictId: survey.targetDistrictId
+        targetDistrictId: survey.targetDistrictId,
+        targetExpatriateRegionId: survey.targetExpatriateRegionId,
+        targetSectorNationalLevelId: survey.targetSectorNationalLevelId,
+        targetSectorRegionId: survey.targetSectorRegionId,
+        targetSectorLocalityId: survey.targetSectorLocalityId,
+        targetSectorAdminUnitId: survey.targetSectorAdminUnitId,
+        targetSectorDistrictId: survey.targetSectorDistrictId,
+        hierarchy: determineHierarchyFromTargets(survey)
       };
     });
   } catch (error: any) {
@@ -735,116 +633,9 @@ export const getPublicSurveys = async (userId: string, adminUser: any = null): P
 // Get member surveys
 export const getMemberSurveys = async (userId: string, adminUser: any = null): Promise<any[]> => {
   try {
-    // Start with basic filter for member surveys
-    let whereClause: any = { 
-        published: true,
-        audience: 'member'
-    };
-    
-    // Apply hierarchical access control if adminUser is provided
-    if (adminUser) {
-      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
-      
-      console.log("User hierarchy info for member surveys:", { adminLevel, regionId, localityId, adminUnitId, districtId });
-      
-      switch (adminLevel) {
-        case 'GENERAL_SECRETARIAT':
-        case 'ADMIN':
-          // General Secretariat and Admin can see all member surveys
-          console.log("Admin/General Secretariat user - showing all member surveys");
-          break;
-          
-        default:
-          // For all other users, apply direct ID comparison filtering
-          console.log("Applying hierarchical filtering for member surveys");
-          
-          // Start with an empty OR array
-          const hierarchyFilter: any[] = [];
-          
-          // Add conditions based on user's hierarchy level
-          if (regionId) {
-            // Region-level surveys (where regionId matches AND lower levels are not targeted)
-            hierarchyFilter.push({
-              targetRegionId: regionId,
-              AND: [
-                {
-                  OR: [
-                    { targetLocalityId: null },
-                    { targetLocalityId: localityId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add locality-level surveys only if user has a locality
-          if (localityId) {
-            hierarchyFilter.push({
-              targetLocalityId: localityId,
-              AND: [
-                {
-                  OR: [
-                    { targetAdminUnitId: null },
-                    { targetAdminUnitId: adminUnitId }
-                  ]
-                },
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add admin unit-level surveys only if user has an admin unit
-          if (adminUnitId) {
-            hierarchyFilter.push({
-              targetAdminUnitId: adminUnitId,
-              AND: [
-                {
-                  OR: [
-                    { targetDistrictId: null },
-                    { targetDistrictId: districtId }
-                  ]
-                }
-              ]
-            });
-          }
-          
-          // Add district-level surveys only if user has a district
-          if (districtId) {
-            hierarchyFilter.push({
-              targetDistrictId: districtId
-            });
-          }
-          
-          // If hierarchy filters were added, include them in the where clause
-          if (hierarchyFilter.length > 0) {
-            whereClause.OR = hierarchyFilter;
-          } else {
-            whereClause.id = 'none'; // This will return no results
-            console.log("No hierarchy information available for user, returning no member surveys");
-          }
-          
-          console.log("Final member surveys filter criteria:", JSON.stringify(whereClause, null, 2));
-      }
-    }
-    
-    // Fetch member surveys with hierarchical filtering
+    const baseClause = adminUser ? await buildContentWhereClause(adminUser) : { published: true };
+    const whereClause = { ...baseClause, audience: 'member' };
+
     const surveys = await prisma.survey.findMany({
       where: whereClause,
       orderBy: { dueDate: 'asc' },
@@ -857,8 +648,7 @@ export const getMemberSurveys = async (userId: string, adminUser: any = null): P
     });
 
     console.log(`Found ${surveys.length} member surveys matching criteria`);
-    
-    // Transform data to match expected format
+
     return surveys.map(survey => {
       const isCompleted = survey.responses.length > 0;
       const questions = JSON.parse(survey.questions);
@@ -872,15 +662,21 @@ export const getMemberSurveys = async (userId: string, adminUser: any = null): P
         questions: questions,
         questionsCount: questionsCount,
         isCompleted,
-        // Add fields to match web schema
         participants: Math.floor(Math.random() * 100) + 20,
         type: survey.audience || 'public',
         audience: survey.audience || 'public',
-        // Add hierarchy information
+        targetNationalLevelId: survey.targetNationalLevelId,
         targetRegionId: survey.targetRegionId,
         targetLocalityId: survey.targetLocalityId,
         targetAdminUnitId: survey.targetAdminUnitId,
-        targetDistrictId: survey.targetDistrictId
+        targetDistrictId: survey.targetDistrictId,
+        targetExpatriateRegionId: survey.targetExpatriateRegionId,
+        targetSectorNationalLevelId: survey.targetSectorNationalLevelId,
+        targetSectorRegionId: survey.targetSectorRegionId,
+        targetSectorLocalityId: survey.targetSectorLocalityId,
+        targetSectorAdminUnitId: survey.targetSectorAdminUnitId,
+        targetSectorDistrictId: survey.targetSectorDistrictId,
+        hierarchy: determineHierarchyFromTargets(survey)
       };
     });
   } catch (error: any) {

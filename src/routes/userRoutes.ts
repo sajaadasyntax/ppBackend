@@ -27,6 +27,7 @@ router.get('/hierarchy/admin-units/:adminUnitId/districts', authorize(['ADMIN', 
 // User hierarchy management routes
 router.get('/:id/hierarchy-path', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.getUserHierarchyPath);
 router.put('/:id/hierarchy', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.updateUserHierarchy);
+router.get('/available-admins', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.getAvailableAdmins);
 
 // Admin routes - requires admin role
 router.get('/', authorize(['ADMIN']), userController.getAllUsers);
