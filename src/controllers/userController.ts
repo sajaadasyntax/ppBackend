@@ -2,7 +2,6 @@ import userService from '../services/userService';
 import prisma from '../utils/prisma';
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types';
-import { AdminLevel } from '@prisma/client';
 
 // Get all users with pagination and hierarchical access control
 export const getAllUsers = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
