@@ -89,21 +89,14 @@ async function main() {
     throw new Error(`Admin Unit ${adminUnit.name} has no districts. Please run prisma/seed.ts first.`);
   }
 
-  const hierarchyRefs: Record<HierarchyAdminLevel, Record<string, string>> = {
-    REGION: { regionId: region.id },
-    LOCALITY: { regionId: region.id, localityId: locality.id },
-    ADMIN_UNIT: {
-      regionId: region.id,
-      localityId: locality.id,
-      adminUnitId: adminUnit.id,
-    },
-    DISTRICT: {
-      regionId: region.id,
-      localityId: locality.id,
-      adminUnitId: adminUnit.id,
-      districtId: district.id,
-    },
-    USER: { regionId: region.id },
+  // IMPORTANT: ALL users must exist at district level
+  // The adminLevel field determines their permissions, but they must have districtId
+  // Parent IDs will be auto-derived from district
+  const baseHierarchyRefs = {
+    regionId: region.id,
+    localityId: locality.id,
+    adminUnitId: adminUnit.id,
+    districtId: district.id,
   };
 
   for (const user of USERS) {
@@ -111,9 +104,10 @@ async function main() {
       email: user.email,
       mobileNumber: user.mobileNumber,
       password: passwordHash,
-      role: 'USER',
+      role: user.adminLevel === 'USER' ? 'USER' : 'ADMIN',
       adminLevel: user.adminLevel,
-      ...hierarchyRefs[user.adminLevel],
+      // ALL users get district-level assignment
+      ...baseHierarchyRefs,
       profile: {
         create: {
           firstName: user.firstName,
@@ -127,12 +121,13 @@ async function main() {
       where: { mobileNumber: user.mobileNumber },
       update: {
         adminLevel: user.adminLevel,
-        ...hierarchyRefs[user.adminLevel],
+        // Ensure all users have district assignment
+        ...baseHierarchyRefs,
       },
       create: data,
     });
 
-    console.log(`  ✅ Seeded ${user.adminLevel} user (${user.mobileNumber})`);
+    console.log(`  ✅ Seeded ${user.adminLevel} user (${user.mobileNumber}) at district level`);
   }
 
   console.log('🎉 Done seeding hierarchy users!');

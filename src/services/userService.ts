@@ -63,6 +63,49 @@ export async function createUser(userData: any): Promise<any> {
       throw new Error('Mobile number already in use');
     }
 
+    // IMPORTANT: Users MUST exist at district level (except root admins)
+    // If districtId is provided, auto-derive parent hierarchy IDs
+    let finalRegionId = regionId;
+    let finalLocalityId = localityId;
+    let finalAdminUnitId = adminUnitId;
+    let finalDistrictId = districtId;
+
+    // Root admins (GENERAL_SECRETARIAT, ADMIN) don't need district
+    const isRootAdmin = resolvedAdminLevel === 'GENERAL_SECRETARIAT' || resolvedAdminLevel === 'ADMIN' || role === 'ADMIN';
+    
+    if (!isRootAdmin) {
+      // For all other users, districtId is REQUIRED
+      if (!districtId) {
+        throw new Error('District ID is required for all users (except root admins)');
+      }
+
+      // Fetch district and auto-derive parent hierarchy IDs
+      const district = await tx.district.findUnique({
+        where: { id: districtId },
+        include: {
+          adminUnit: {
+            include: {
+              locality: {
+                include: {
+                  region: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!district) {
+        throw new Error('Invalid district ID');
+      }
+
+      // Auto-derive parent IDs from district
+      finalDistrictId = district.id;
+      finalAdminUnitId = district.adminUnitId;
+      finalLocalityId = district.adminUnit.localityId;
+      finalRegionId = district.adminUnit.locality.regionId;
+    }
+
     // Create the user
     const user = await tx.user.create({
       data: {
@@ -72,11 +115,11 @@ export async function createUser(userData: any): Promise<any> {
         adminLevel: resolvedAdminLevel,
         mobileNumber: normalizedMobile,
         
-        // Add hierarchy references if provided
-        regionId: regionId || undefined,
-        localityId: localityId || undefined,
-        adminUnitId: adminUnitId || undefined,
-        districtId: districtId || undefined,
+        // Use auto-derived hierarchy IDs
+        regionId: finalRegionId || undefined,
+        localityId: finalLocalityId || undefined,
+        adminUnitId: finalAdminUnitId || undefined,
+        districtId: finalDistrictId || undefined,
         
         profile: profile ? {
           create: {
