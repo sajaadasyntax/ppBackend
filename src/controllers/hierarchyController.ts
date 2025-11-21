@@ -752,6 +752,28 @@ export const getDistrictsByAdminUnit = async (req: AuthenticatedRequest, res: Re
             }
           }
         },
+        users: {
+          select: {
+            id: true,
+            email: true,
+            mobileNumber: true,
+            adminLevel: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            },
+            memberDetails: {
+              select: {
+                fullName: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        },
         _count: {
           select: {
             users: true
@@ -1030,6 +1052,11 @@ export const getUsersByHierarchyLevel = async (req: AuthenticatedRequest, res: R
 export const getNationalLevels = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const adminUser = req.user;
+    const includeParam = typeof req.query.include === 'string'
+      ? req.query.include.split(',').map((s) => s.trim())
+      : [];
+    const includeRegions = includeParam.includes('regions');
+    const includeUsers = includeParam.includes('users') || includeParam.includes('admins');
     
     let whereClause: Prisma.NationalLevelWhereInput = { active: true };
     
@@ -1056,31 +1083,92 @@ export const getNationalLevels = async (req: AuthenticatedRequest, res: Response
       }
     }
     
-    const nationalLevels = await prisma.nationalLevel.findMany({
-      where: whereClause,
-      include: {
-        admin: {
-          select: {
-            id: true,
-            email: true,
-            mobileNumber: true,
-            profile: {
-              select: {
-                firstName: true,
-                lastName: true
+    const includeConfig: Prisma.NationalLevelInclude = {
+      admin: {
+        select: {
+          id: true,
+          email: true,
+          mobileNumber: true,
+          profile: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          },
+          memberDetails: {
+            select: {
+              fullName: true
+            }
+          }
+        }
+      },
+      _count: {
+        select: { regions: true, users: true }
+      }
+    };
+
+    if (includeRegions) {
+      includeConfig.regions = {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          active: true,
+          admin: {
+            select: {
+              id: true,
+              email: true,
+              mobileNumber: true,
+              profile: {
+                select: {
+                  firstName: true,
+                  lastName: true
+                }
+              },
+              memberDetails: {
+                select: {
+                  fullName: true
+                }
               }
-            },
-            memberDetails: {
-              select: {
-                fullName: true
-              }
+            }
+          },
+          _count: {
+            select: {
+              localities: true,
+              users: true
             }
           }
         },
-        _count: {
-          select: { regions: true, users: true }
-        }
-      },
+        orderBy: { name: 'asc' }
+      };
+    }
+
+    if (includeUsers) {
+      includeConfig.users = {
+        select: {
+          id: true,
+          email: true,
+          mobileNumber: true,
+          adminLevel: true,
+          profile: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          },
+          memberDetails: {
+            select: {
+              fullName: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+      };
+    }
+
+    const nationalLevels = await prisma.nationalLevel.findMany({
+      where: whereClause,
+      include: includeConfig,
       orderBy: { name: 'asc' }
     });
     
