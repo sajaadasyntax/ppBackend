@@ -159,13 +159,7 @@ export const createMember = async (req: AuthenticatedRequest, res: Response, _ne
       return;
     }
 
-    // Auto-derive parent hierarchy IDs from district
-    const regionId = district.adminUnit.locality.regionId;
-    const localityId = district.adminUnit.localityId;
-    const adminUnitId = district.adminUnitId;
-    const districtId = district.id;
-    
-    // Get names from district hierarchy
+    // Get names from district hierarchy for memberDetails
     const regionName = district.adminUnit.locality.region.name;
     const localityName = district.adminUnit.locality.name;
     
@@ -177,7 +171,7 @@ export const createMember = async (req: AuthenticatedRequest, res: Response, _ne
       role: 'USER', // Default role for new members
       mobileNumber: residenceInfo.mobile,
       // Only pass districtId - parent IDs will be auto-derived
-      districtId: districtId,
+      districtId: district.id,
       profile: {
         firstName: personalInfo.fullName.split(' ')[0] || '',
         lastName: personalInfo.fullName.split(' ').slice(1).join(' ') || '',
@@ -556,10 +550,6 @@ export const createUserWithHierarchy = async (req: AuthenticatedRequest, res: Re
       lastName, 
       phoneNumber, 
       avatarUrl,
-      hierarchyLevel,
-      regionId,
-      localityId,
-      adminUnitId,
       districtId
     } = req.body;
 
@@ -1089,7 +1079,8 @@ export const getAvailableAdmins = async (req: AuthenticatedRequest, res: Respons
           adminLevel: user.adminLevel
         }));
 
-        return res.json(formattedExpatriateUsers);
+        res.json(formattedExpatriateUsers);
+        return;
         
       default:
         res.status(400).json({ error: 'Invalid level parameter' });
@@ -1098,7 +1089,8 @@ export const getAvailableAdmins = async (req: AuthenticatedRequest, res: Respons
 
     // If no districts found, return empty array
     if (districtIds.length === 0) {
-      return res.json([]);
+      res.json([]);
+      return;
     }
 
     // Get users from these districts (users MUST have districtId)
