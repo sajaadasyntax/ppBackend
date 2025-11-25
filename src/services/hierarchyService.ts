@@ -382,24 +382,176 @@ class HierarchyService {
   }
 
   /**
-   * Determine the appropriate hierarchy level for content based on user's position
-   * @param user - User object with hierarchy information
+   * Determine the appropriate hierarchy level for content based on user's admin level
+   * Automatically sets hierarchy targeting based on the logged-in admin's level
+   * @param user - User object with hierarchy information and adminLevel
    * @returns Hierarchy targeting for content creation
    */
   static determineContentHierarchy(user: any): any {
-    // Content is targeted to the user's most specific level
-    if (user.districtId) {
-      return { targetDistrictId: user.districtId };
-    } else if (user.adminUnitId) {
-      return { targetAdminUnitId: user.adminUnitId };
-    } else if (user.localityId) {
-      return { targetLocalityId: user.localityId };
-    } else if (user.regionId) {
-      return { targetRegionId: user.regionId };
+    const hierarchy: any = {};
+    const activeHierarchy = user.activeHierarchy || 'ORIGINAL';
+    
+    // Determine which hierarchy type to use (ORIGINAL, EXPATRIATE, or SECTOR)
+    const isExpatriate = activeHierarchy === 'EXPATRIATE';
+    const isSector = activeHierarchy === 'SECTOR';
+    
+    // Based on adminLevel, set hierarchy targeting automatically
+    // REGION admins target their region
+    if (user.adminLevel === 'REGION') {
+      if (isExpatriate && user.expatriateRegionId) {
+        hierarchy.targetExpatriateRegionId = user.expatriateRegionId;
+      } else if (isSector && user.sectorRegionId) {
+        hierarchy.targetSectorRegionId = user.sectorRegionId;
+      } else if (user.regionId) {
+        hierarchy.targetRegionId = user.regionId;
+      }
+      // Clear lower levels for region-level targeting
+      if (!isExpatriate) {
+        hierarchy.targetLocalityId = null;
+        hierarchy.targetAdminUnitId = null;
+        hierarchy.targetDistrictId = null;
+      }
+      if (isSector) {
+        hierarchy.targetSectorLocalityId = null;
+        hierarchy.targetSectorAdminUnitId = null;
+        hierarchy.targetSectorDistrictId = null;
+      }
+    }
+    // LOCALITY admins target their locality (and parent region)
+    else if (user.adminLevel === 'LOCALITY') {
+      if (isSector) {
+        if (user.sectorRegionId) {
+          hierarchy.targetSectorRegionId = user.sectorRegionId;
+        }
+        if (user.sectorLocalityId) {
+          hierarchy.targetSectorLocalityId = user.sectorLocalityId;
+        }
+        hierarchy.targetSectorAdminUnitId = null;
+        hierarchy.targetSectorDistrictId = null;
+      } else {
+        if (user.regionId) {
+          hierarchy.targetRegionId = user.regionId;
+        }
+        if (user.localityId) {
+          hierarchy.targetLocalityId = user.localityId;
+        }
+        // Clear lower levels for locality-level targeting
+        hierarchy.targetAdminUnitId = null;
+        hierarchy.targetDistrictId = null;
+      }
+    }
+    // ADMIN_UNIT admins target their admin unit (and parent locality/region)
+    else if (user.adminLevel === 'ADMIN_UNIT') {
+      if (isSector) {
+        if (user.sectorRegionId) {
+          hierarchy.targetSectorRegionId = user.sectorRegionId;
+        }
+        if (user.sectorLocalityId) {
+          hierarchy.targetSectorLocalityId = user.sectorLocalityId;
+        }
+        if (user.sectorAdminUnitId) {
+          hierarchy.targetSectorAdminUnitId = user.sectorAdminUnitId;
+        }
+        hierarchy.targetSectorDistrictId = null;
+      } else {
+        if (user.regionId) {
+          hierarchy.targetRegionId = user.regionId;
+        }
+        if (user.localityId) {
+          hierarchy.targetLocalityId = user.localityId;
+        }
+        if (user.adminUnitId) {
+          hierarchy.targetAdminUnitId = user.adminUnitId;
+        }
+        // Clear lower levels for admin unit-level targeting
+        hierarchy.targetDistrictId = null;
+      }
+    }
+    // DISTRICT admins target their district (and all parent levels)
+    else if (user.adminLevel === 'DISTRICT') {
+      if (isSector) {
+        if (user.sectorRegionId) {
+          hierarchy.targetSectorRegionId = user.sectorRegionId;
+        }
+        if (user.sectorLocalityId) {
+          hierarchy.targetSectorLocalityId = user.sectorLocalityId;
+        }
+        if (user.sectorAdminUnitId) {
+          hierarchy.targetSectorAdminUnitId = user.sectorAdminUnitId;
+        }
+        if (user.sectorDistrictId) {
+          hierarchy.targetSectorDistrictId = user.sectorDistrictId;
+        }
+      } else {
+        if (user.regionId) {
+          hierarchy.targetRegionId = user.regionId;
+        }
+        if (user.localityId) {
+          hierarchy.targetLocalityId = user.localityId;
+        }
+        if (user.adminUnitId) {
+          hierarchy.targetAdminUnitId = user.adminUnitId;
+        }
+        if (user.districtId) {
+          hierarchy.targetDistrictId = user.districtId;
+        }
+      }
+    }
+    // For other admin levels or users without specific hierarchy, use most specific level available
+    else {
+      if (isSector) {
+        if (user.sectorDistrictId) {
+          hierarchy.targetSectorDistrictId = user.sectorDistrictId;
+          if (user.sectorAdminUnitId) hierarchy.targetSectorAdminUnitId = user.sectorAdminUnitId;
+          if (user.sectorLocalityId) hierarchy.targetSectorLocalityId = user.sectorLocalityId;
+          if (user.sectorRegionId) hierarchy.targetSectorRegionId = user.sectorRegionId;
+        } else if (user.sectorAdminUnitId) {
+          hierarchy.targetSectorAdminUnitId = user.sectorAdminUnitId;
+          if (user.sectorLocalityId) hierarchy.targetSectorLocalityId = user.sectorLocalityId;
+          if (user.sectorRegionId) hierarchy.targetSectorRegionId = user.sectorRegionId;
+          hierarchy.targetSectorDistrictId = null;
+        } else if (user.sectorLocalityId) {
+          hierarchy.targetSectorLocalityId = user.sectorLocalityId;
+          if (user.sectorRegionId) hierarchy.targetSectorRegionId = user.sectorRegionId;
+          hierarchy.targetSectorAdminUnitId = null;
+          hierarchy.targetSectorDistrictId = null;
+        } else if (user.sectorRegionId) {
+          hierarchy.targetSectorRegionId = user.sectorRegionId;
+          hierarchy.targetSectorLocalityId = null;
+          hierarchy.targetSectorAdminUnitId = null;
+          hierarchy.targetSectorDistrictId = null;
+        }
+      } else {
+        if (user.districtId) {
+          hierarchy.targetDistrictId = user.districtId;
+          if (user.adminUnitId) hierarchy.targetAdminUnitId = user.adminUnitId;
+          if (user.localityId) hierarchy.targetLocalityId = user.localityId;
+          if (user.regionId) hierarchy.targetRegionId = user.regionId;
+        } else if (user.adminUnitId) {
+          hierarchy.targetAdminUnitId = user.adminUnitId;
+          if (user.localityId) hierarchy.targetLocalityId = user.localityId;
+          if (user.regionId) hierarchy.targetRegionId = user.regionId;
+          hierarchy.targetDistrictId = null;
+        } else if (user.localityId) {
+          hierarchy.targetLocalityId = user.localityId;
+          if (user.regionId) hierarchy.targetRegionId = user.regionId;
+          hierarchy.targetAdminUnitId = null;
+          hierarchy.targetDistrictId = null;
+        } else if (user.regionId) {
+          hierarchy.targetRegionId = user.regionId;
+          hierarchy.targetLocalityId = null;
+          hierarchy.targetAdminUnitId = null;
+          hierarchy.targetDistrictId = null;
+        }
+      }
     }
     
-    // If user has no hierarchy assignment, content is global
-    return {};
+    // Handle national level if applicable (only for ORIGINAL hierarchy)
+    if (user.nationalLevelId && !isExpatriate && !isSector) {
+      hierarchy.targetNationalLevelId = user.nationalLevelId;
+    }
+    
+    return hierarchy;
   }
 
   /**

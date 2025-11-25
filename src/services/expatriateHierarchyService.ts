@@ -8,8 +8,29 @@ export async function getAllExpatriateRegions(): Promise<any[]> {
     where: { active: true },
     orderBy: { name: 'asc' },
     include: {
+      admin: {
+        select: {
+          id: true,
+          email: true,
+          mobileNumber: true,
+          profile: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          },
+          memberDetails: {
+            select: {
+              fullName: true
+            }
+          }
+        }
+      },
       _count: {
-        select: { users: true }
+        select: { 
+          users: true,
+          sectorNationalLevels: true
+        }
       }
     }
   });
@@ -72,13 +93,42 @@ export async function createExpatriateRegion(data: any): Promise<any> {
  * Update expatriate region
  */
 export async function updateExpatriateRegion(id: string, data: any): Promise<any> {
+  const updateData: any = {};
+  
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.code !== undefined) updateData.code = data.code;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.active !== undefined) updateData.active = data.active;
+  if (data.adminId !== undefined) updateData.adminId = data.adminId;
+  
   return await prisma.expatriateRegion.update({
     where: { id },
-    data: {
-      name: data.name,
-      code: data.code,
-      description: data.description,
-      active: data.active
+    data: updateData,
+    include: {
+      admin: {
+        select: {
+          id: true,
+          email: true,
+          mobileNumber: true,
+          profile: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          },
+          memberDetails: {
+            select: {
+              fullName: true
+            }
+          }
+        }
+      },
+      _count: {
+        select: {
+          users: true,
+          sectorNationalLevels: true
+        }
+      }
     }
   });
 }

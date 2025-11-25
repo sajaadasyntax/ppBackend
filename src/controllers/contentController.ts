@@ -172,8 +172,38 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response, _
       }
       
       try {
-        // Validate that hierarchy targeting is provided
-        if (!bulletinData.targetRegionId) {
+        // Automatically set hierarchy based on logged-in admin's level
+        if (req.user) {
+          const user = await HierarchyService.getUserWithHierarchy(req.user.id);
+          if (user) {
+            const autoHierarchy = HierarchyService.determineContentHierarchy(user);
+            // Merge auto hierarchy with provided data (provided data takes precedence if explicitly set)
+            // Only auto-set if not explicitly provided
+            if (!bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
+                !bulletinData.targetAdminUnitId && !bulletinData.targetDistrictId &&
+                !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
+              Object.assign(bulletinData, autoHierarchy);
+              console.log('Auto-set hierarchy based on admin level:', autoHierarchy);
+            } else {
+              // If some hierarchy is provided, merge with auto hierarchy for parent levels
+              if (autoHierarchy.targetRegionId && !bulletinData.targetRegionId) {
+                bulletinData.targetRegionId = autoHierarchy.targetRegionId;
+              }
+              if (autoHierarchy.targetLocalityId && !bulletinData.targetLocalityId) {
+                bulletinData.targetLocalityId = autoHierarchy.targetLocalityId;
+              }
+              if (autoHierarchy.targetAdminUnitId && !bulletinData.targetAdminUnitId) {
+                bulletinData.targetAdminUnitId = autoHierarchy.targetAdminUnitId;
+              }
+              if (autoHierarchy.targetDistrictId && !bulletinData.targetDistrictId) {
+                bulletinData.targetDistrictId = autoHierarchy.targetDistrictId;
+              }
+            }
+          }
+        }
+        
+        // Fallback: Validate that hierarchy targeting is provided
+        if (!bulletinData.targetRegionId && !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
           console.warn('targetRegionId missing from bulletin data, attempting to fetch default region');
           
           try {
@@ -242,28 +272,59 @@ export const updateBulletin = async (req: AuthenticatedRequest, res: Response, _
       }
       
       try {
-        // Validate that hierarchy targeting is provided
-        if (bulletinData.targetRegionId === undefined || bulletinData.targetRegionId === null) {
-          console.warn('targetRegionId missing from bulletin update data, attempting to fetch default region');
-          
-          try {
-            // Get the first available region as a fallback
-            const regions = await prisma.region.findMany({
-              where: { active: true },
-              take: 1
-            });
-            
-            if (regions && regions.length > 0) {
-              console.log(`Using default region ID ${regions[0].id} for bulletin update`);
-              bulletinData.targetRegionId = regions[0].id;
+        // Automatically set hierarchy based on logged-in admin's level (if not explicitly provided)
+        if (req.user) {
+          const user = await HierarchyService.getUserWithHierarchy(req.user.id);
+          if (user) {
+            const autoHierarchy = HierarchyService.determineContentHierarchy(user);
+            // Only auto-set if not explicitly provided in update
+            if (!bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
+                !bulletinData.targetAdminUnitId && !bulletinData.targetDistrictId &&
+                !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
+              Object.assign(bulletinData, autoHierarchy);
+              console.log('Auto-set hierarchy for update based on admin level:', autoHierarchy);
             } else {
-              res.status(400).json({ error: 'targetRegionId is required for updating bulletins and no default region found' });
+              // Merge parent levels if not explicitly set
+              if (autoHierarchy.targetRegionId && !bulletinData.targetRegionId) {
+                bulletinData.targetRegionId = autoHierarchy.targetRegionId;
+              }
+              if (autoHierarchy.targetLocalityId && !bulletinData.targetLocalityId) {
+                bulletinData.targetLocalityId = autoHierarchy.targetLocalityId;
+              }
+              if (autoHierarchy.targetAdminUnitId && !bulletinData.targetAdminUnitId) {
+                bulletinData.targetAdminUnitId = autoHierarchy.targetAdminUnitId;
+              }
+              if (autoHierarchy.targetDistrictId && !bulletinData.targetDistrictId) {
+                bulletinData.targetDistrictId = autoHierarchy.targetDistrictId;
+              }
+            }
+          }
+        }
+        
+        // Fallback: Validate that hierarchy targeting is provided
+        if (bulletinData.targetRegionId === undefined || bulletinData.targetRegionId === null) {
+          if (!bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
+            console.warn('targetRegionId missing from bulletin update data, attempting to fetch default region');
+            
+            try {
+              // Get the first available region as a fallback
+              const regions = await prisma.region.findMany({
+                where: { active: true },
+                take: 1
+              });
+              
+              if (regions && regions.length > 0) {
+                console.log(`Using default region ID ${regions[0].id} for bulletin update`);
+                bulletinData.targetRegionId = regions[0].id;
+              } else {
+                res.status(400).json({ error: 'targetRegionId is required for updating bulletins and no default region found' });
+                return;
+              }
+            } catch (err: any) {
+              console.error('Error finding default region for update:', err);
+              res.status(400).json({ error: 'targetRegionId is required for updating bulletins' });
               return;
             }
-          } catch (err: any) {
-            console.error('Error finding default region for update:', err);
-            res.status(400).json({ error: 'targetRegionId is required for updating bulletins' });
-            return;
           }
         }
         
@@ -568,8 +629,37 @@ export const createVotingItem = async (req: AuthenticatedRequest, res: Response,
     }
     const votingData = req.body;
     
-    // Validate that hierarchy targeting is provided
-    if (!votingData.targetRegionId) {
+    // Automatically set hierarchy based on logged-in admin's level
+    if (req.user) {
+      const user = await HierarchyService.getUserWithHierarchy(userId);
+      if (user) {
+        const autoHierarchy = HierarchyService.determineContentHierarchy(user);
+        // Only auto-set if not explicitly provided
+        if (!votingData.targetRegionId && !votingData.targetLocalityId && 
+            !votingData.targetAdminUnitId && !votingData.targetDistrictId &&
+            !votingData.targetExpatriateRegionId && !votingData.targetSectorRegionId) {
+          Object.assign(votingData, autoHierarchy);
+          console.log('Auto-set hierarchy for voting item based on admin level:', autoHierarchy);
+        } else {
+          // Merge parent levels if not explicitly set
+          if (autoHierarchy.targetRegionId && !votingData.targetRegionId) {
+            votingData.targetRegionId = autoHierarchy.targetRegionId;
+          }
+          if (autoHierarchy.targetLocalityId && !votingData.targetLocalityId) {
+            votingData.targetLocalityId = autoHierarchy.targetLocalityId;
+          }
+          if (autoHierarchy.targetAdminUnitId && !votingData.targetAdminUnitId) {
+            votingData.targetAdminUnitId = autoHierarchy.targetAdminUnitId;
+          }
+          if (autoHierarchy.targetDistrictId && !votingData.targetDistrictId) {
+            votingData.targetDistrictId = autoHierarchy.targetDistrictId;
+          }
+        }
+      }
+    }
+    
+    // Validate that hierarchy targeting is provided (fallback)
+    if (!votingData.targetRegionId && !votingData.targetExpatriateRegionId && !votingData.targetSectorRegionId) {
       res.status(400).json({ error: 'targetRegionId is required for creating voting items' });
       return;
     }
@@ -599,8 +689,37 @@ export const createSurvey = async (req: AuthenticatedRequest, res: Response, _ne
     }
     const surveyData = req.body;
     
-    // Validate that hierarchy targeting is provided
-    if (!surveyData.targetRegionId) {
+    // Automatically set hierarchy based on logged-in admin's level
+    if (req.user) {
+      const user = await HierarchyService.getUserWithHierarchy(userId);
+      if (user) {
+        const autoHierarchy = HierarchyService.determineContentHierarchy(user);
+        // Only auto-set if not explicitly provided
+        if (!surveyData.targetRegionId && !surveyData.targetLocalityId && 
+            !surveyData.targetAdminUnitId && !surveyData.targetDistrictId &&
+            !surveyData.targetExpatriateRegionId && !surveyData.targetSectorRegionId) {
+          Object.assign(surveyData, autoHierarchy);
+          console.log('Auto-set hierarchy for survey based on admin level:', autoHierarchy);
+        } else {
+          // Merge parent levels if not explicitly set
+          if (autoHierarchy.targetRegionId && !surveyData.targetRegionId) {
+            surveyData.targetRegionId = autoHierarchy.targetRegionId;
+          }
+          if (autoHierarchy.targetLocalityId && !surveyData.targetLocalityId) {
+            surveyData.targetLocalityId = autoHierarchy.targetLocalityId;
+          }
+          if (autoHierarchy.targetAdminUnitId && !surveyData.targetAdminUnitId) {
+            surveyData.targetAdminUnitId = autoHierarchy.targetAdminUnitId;
+          }
+          if (autoHierarchy.targetDistrictId && !surveyData.targetDistrictId) {
+            surveyData.targetDistrictId = autoHierarchy.targetDistrictId;
+          }
+        }
+      }
+    }
+    
+    // Validate that hierarchy targeting is provided (fallback)
+    if (!surveyData.targetRegionId && !surveyData.targetExpatriateRegionId && !surveyData.targetSectorRegionId) {
       res.status(400).json({ error: 'targetRegionId is required for creating surveys' });
       return;
     }

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import * as contentService from '../services/contentService';
+import HierarchyService from '../services/hierarchyService';
 import * as path from 'path';
 import * as fs from 'fs';
 import multer from 'multer';
@@ -116,8 +117,45 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response): 
       }
       
       try {
-        // Get a default region if targetRegionId is missing
-        if (!bulletinData.targetRegionId) {
+        // Automatically set hierarchy based on logged-in admin's level
+        if (req.user) {
+          const user = await HierarchyService.getUserWithHierarchy(req.user.id);
+          if (user) {
+            const autoHierarchy = HierarchyService.determineContentHierarchy(user);
+            // Merge auto hierarchy with provided data (provided data takes precedence if explicitly set)
+            // Only auto-set if not explicitly provided
+            if (!bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
+                !bulletinData.targetAdminUnitId && !bulletinData.targetDistrictId &&
+                !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
+              Object.assign(bulletinData, autoHierarchy);
+              console.log('Auto-set hierarchy based on admin level:', autoHierarchy);
+            } else {
+              // If some hierarchy is provided, merge with auto hierarchy for parent levels
+              if (autoHierarchy.targetRegionId && !bulletinData.targetRegionId) {
+                bulletinData.targetRegionId = autoHierarchy.targetRegionId;
+              }
+              if (autoHierarchy.targetLocalityId && !bulletinData.targetLocalityId) {
+                bulletinData.targetLocalityId = autoHierarchy.targetLocalityId;
+              }
+              if (autoHierarchy.targetAdminUnitId && !bulletinData.targetAdminUnitId) {
+                bulletinData.targetAdminUnitId = autoHierarchy.targetAdminUnitId;
+              }
+              if (autoHierarchy.targetDistrictId && !bulletinData.targetDistrictId) {
+                bulletinData.targetDistrictId = autoHierarchy.targetDistrictId;
+              }
+              // Handle expatriate and sector hierarchies
+              if (autoHierarchy.targetExpatriateRegionId && !bulletinData.targetExpatriateRegionId) {
+                bulletinData.targetExpatriateRegionId = autoHierarchy.targetExpatriateRegionId;
+              }
+              if (autoHierarchy.targetSectorRegionId && !bulletinData.targetSectorRegionId) {
+                bulletinData.targetSectorRegionId = autoHierarchy.targetSectorRegionId;
+              }
+            }
+          }
+        }
+        
+        // Fallback: Get a default region if targetRegionId is still missing (for backward compatibility)
+        if (!bulletinData.targetRegionId && !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
           console.warn('targetRegionId missing, fetching default region');
           
           try {
@@ -138,12 +176,6 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response): 
             res.status(400).json({ error: 'Could not find a default region' });
             return;
           }
-        }
-        
-        // Check again if we have targetRegionId
-        if (!bulletinData.targetRegionId) {
-          res.status(400).json({ error: 'targetRegionId is required for creating bulletins' });
-          return;
         }
         
         // Create bulletin
@@ -230,8 +262,37 @@ export const updateBulletin = async (req: AuthenticatedRequest, res: Response): 
       }
       
       try {
-        // Get a default region if targetRegionId is missing
-        if (!bulletinData.targetRegionId) {
+        // Automatically set hierarchy based on logged-in admin's level (if not explicitly provided)
+        if (req.user) {
+          const user = await HierarchyService.getUserWithHierarchy(req.user.id);
+          if (user) {
+            const autoHierarchy = HierarchyService.determineContentHierarchy(user);
+            // Only auto-set if not explicitly provided in update
+            if (!bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
+                !bulletinData.targetAdminUnitId && !bulletinData.targetDistrictId &&
+                !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
+              Object.assign(bulletinData, autoHierarchy);
+              console.log('Auto-set hierarchy for update based on admin level:', autoHierarchy);
+            } else {
+              // Merge parent levels if not explicitly set
+              if (autoHierarchy.targetRegionId && !bulletinData.targetRegionId) {
+                bulletinData.targetRegionId = autoHierarchy.targetRegionId;
+              }
+              if (autoHierarchy.targetLocalityId && !bulletinData.targetLocalityId) {
+                bulletinData.targetLocalityId = autoHierarchy.targetLocalityId;
+              }
+              if (autoHierarchy.targetAdminUnitId && !bulletinData.targetAdminUnitId) {
+                bulletinData.targetAdminUnitId = autoHierarchy.targetAdminUnitId;
+              }
+              if (autoHierarchy.targetDistrictId && !bulletinData.targetDistrictId) {
+                bulletinData.targetDistrictId = autoHierarchy.targetDistrictId;
+              }
+            }
+          }
+        }
+        
+        // Fallback: Get a default region if targetRegionId is still missing
+        if (!bulletinData.targetRegionId && !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
           console.warn('targetRegionId missing for update, fetching default region');
           
           try {
@@ -252,12 +313,6 @@ export const updateBulletin = async (req: AuthenticatedRequest, res: Response): 
             res.status(400).json({ error: 'Could not find a default region for update' });
             return;
           }
-        }
-        
-        // Check again if we have targetRegionId
-        if (!bulletinData.targetRegionId) {
-          res.status(400).json({ error: 'targetRegionId is required for updating bulletins' });
-          return;
         }
         
         // Update bulletin
