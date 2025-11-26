@@ -695,14 +695,11 @@ export async function getSectorMembers(sectorId: string, level: SectorLevelType)
 export async function getAvailableUsersForSector(sectorId: string, level: SectorLevelType): Promise<any[]> {
   const idField = sectorIdFields[level];
   
-  // Get users that are NOT already assigned to this sector
-  // and filter by geographic level if possible
+  // Get users that are NOT assigned to any sector at this level
+  // Since a user can only belong to one sector per level, we only return unassigned users
   const users = await prisma.user.findMany({
     where: {
-      OR: [
-        { [idField]: null },
-        { [idField]: { not: sectorId } }
-      ]
+      [idField]: null
     },
     select: {
       id: true,
