@@ -753,7 +753,9 @@ export async function removeUserFromSector(userId: string, sectorId: string, lev
   // First verify the user actually belongs to the specified sector
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { [idField]: true }
+    // Use a typed cast here because we're selecting a dynamic field name
+    // that corresponds to one of the sector*Id columns.
+    select: { [idField]: true } as any
   });
 
   if (!user) {
@@ -761,7 +763,8 @@ export async function removeUserFromSector(userId: string, sectorId: string, lev
   }
 
   // Check if the user belongs to the specified sector
-  if (user[idField] !== sectorId) {
+  const currentSectorId = (user as any)[idField] as string | null;
+  if (currentSectorId !== sectorId) {
     throw new Error('User does not belong to the specified sector');
   }
   
