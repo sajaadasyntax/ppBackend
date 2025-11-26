@@ -692,7 +692,7 @@ export async function getSectorMembers(sectorId: string, level: SectorLevelType)
 }
 
 // Get available users that can be added to a sector (users at the same geographic level)
-export async function getAvailableUsersForSector(sectorId: string, level: SectorLevelType): Promise<any[]> {
+export async function getAvailableUsersForSector(_sectorId: string, level: SectorLevelType): Promise<any[]> {
   const idField = sectorIdFields[level];
   
   // Get users that are NOT assigned to any sector at this level
