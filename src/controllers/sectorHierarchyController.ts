@@ -216,10 +216,12 @@ export const deleteSectorLocality = async (req: AuthenticatedRequest, res: Respo
 
 export const getAllSectorAdminUnits = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorLocalityId, expatriateRegionId } = req.query;
+    const { sectorLocalityId, expatriateRegionId, originalOnly } = req.query;
+    const isOriginalOnly = originalOnly === 'true';
     const adminUnits = await sectorHierarchyService.getAllSectorAdminUnits(
       sectorLocalityId as string,
-      expatriateRegionId as string
+      expatriateRegionId as string,
+      isOriginalOnly
     );
     res.json(adminUnits);
   } catch (error: any) {
@@ -284,10 +286,12 @@ export const deleteSectorAdminUnit = async (req: AuthenticatedRequest, res: Resp
 
 export const getAllSectorDistricts = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorAdminUnitId, expatriateRegionId } = req.query;
+    const { sectorAdminUnitId, expatriateRegionId, originalOnly } = req.query;
+    const isOriginalOnly = originalOnly === 'true';
     const districts = await sectorHierarchyService.getAllSectorDistricts(
       sectorAdminUnitId as string,
-      expatriateRegionId as string
+      expatriateRegionId as string,
+      isOriginalOnly
     );
     res.json(districts);
   } catch (error: any) {
