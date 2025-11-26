@@ -355,3 +355,87 @@ export const getFullSectorHierarchy = async (req: AuthenticatedRequest, res: Res
   }
 };
 
+// ===== SECTOR MEMBERS MANAGEMENT =====
+
+type SectorLevelType = 'national' | 'region' | 'locality' | 'adminUnit' | 'district';
+
+const validLevels: SectorLevelType[] = ['national', 'region', 'locality', 'adminUnit', 'district'];
+
+export const getSectorMembers = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
+  try {
+    const { sectorId, level } = req.params;
+    
+    if (!validLevels.includes(level as SectorLevelType)) {
+      res.status(400).json({ error: 'Invalid sector level' });
+      return;
+    }
+    
+    const members = await sectorHierarchyService.getSectorMembers(sectorId, level as SectorLevelType);
+    res.json({ success: true, data: members });
+  } catch (error: any) {
+    next ? next(error) : res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getAvailableUsersForSector = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
+  try {
+    const { sectorId, level } = req.params;
+    
+    if (!validLevels.includes(level as SectorLevelType)) {
+      res.status(400).json({ error: 'Invalid sector level' });
+      return;
+    }
+    
+    const users = await sectorHierarchyService.getAvailableUsersForSector(sectorId, level as SectorLevelType);
+    res.json({ success: true, data: users });
+  } catch (error: any) {
+    next ? next(error) : res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const addUserToSector = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
+  try {
+    const { sectorId, level } = req.params;
+    const { userId } = req.body;
+    
+    if (!validLevels.includes(level as SectorLevelType)) {
+      res.status(400).json({ error: 'Invalid sector level' });
+      return;
+    }
+    
+    if (!userId) {
+      res.status(400).json({ error: 'User ID is required' });
+      return;
+    }
+    
+    const result = await sectorHierarchyService.addUserToSector(userId, sectorId, level as SectorLevelType);
+    res.json({ success: true, data: result, message: 'User added to sector successfully' });
+  } catch (error: any) {
+    next ? next(error) : res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const removeUserFromSector = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
+  try {
+    const { sectorId, level, userId } = req.params;
+    
+    if (!validLevels.includes(level as SectorLevelType)) {
+      res.status(400).json({ error: 'Invalid sector level' });
+      return;
+    }
+    
+    const result = await sectorHierarchyService.removeUserFromSector(userId, sectorId, level as SectorLevelType);
+    res.json({ success: true, data: result, message: 'User removed from sector successfully' });
+  } catch (error: any) {
+    if (error.message === 'User not found') {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    if (error.message === 'User does not belong to the specified sector') {
+      res.status(400).json({ error: 'User does not belong to the specified sector' });
+      return;
+    }
+    next ? next(error) : res.status(500).json({ error: 'Internal server error' });
+  }
+};
+

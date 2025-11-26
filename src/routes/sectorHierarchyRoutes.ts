@@ -46,5 +46,12 @@ router.delete('/sector-districts/:id', adminOnly, sectorHierarchyController.dele
 // Full hierarchy route
 router.get('/full-hierarchy', sectorHierarchyController.getFullSectorHierarchy);
 
+// Sector members management routes
+// :level can be: national, region, locality, adminUnit, district
+router.get('/members/:level/:sectorId', sectorHierarchyController.getSectorMembers);
+router.get('/available-users/:level/:sectorId', sectorHierarchyController.getAvailableUsersForSector);
+router.post('/members/:level/:sectorId', adminOnly, sectorHierarchyController.addUserToSector);
+router.delete('/members/:level/:sectorId/:userId', adminOnly, sectorHierarchyController.removeUserFromSector);
+
 export default router;
 

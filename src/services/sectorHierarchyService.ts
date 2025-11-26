@@ -634,6 +634,150 @@ export async function deleteSectorDistrict(id: string): Promise<any> {
   });
 }
 
+// ===== SECTOR MEMBERS MANAGEMENT =====
+
+type SectorLevelType = 'national' | 'region' | 'locality' | 'adminUnit' | 'district';
+
+const sectorIdFields: Record<SectorLevelType, string> = {
+  national: 'sectorNationalLevelId',
+  region: 'sectorRegionId',
+  locality: 'sectorLocalityId',
+  adminUnit: 'sectorAdminUnitId',
+  district: 'sectorDistrictId'
+};
+
+// Get members of a specific sector
+export async function getSectorMembers(sectorId: string, level: SectorLevelType): Promise<any[]> {
+  const idField = sectorIdFields[level];
+  
+  return await prisma.user.findMany({
+    where: {
+      [idField]: sectorId
+    },
+    select: {
+      id: true,
+      email: true,
+      mobileNumber: true,
+      adminLevel: true,
+      role: true,
+      profile: {
+        select: {
+          firstName: true,
+          lastName: true
+        }
+      },
+      memberDetails: {
+        select: {
+          fullName: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+}
+
+// Get available users that can be added to a sector (users at the same geographic level)
+export async function getAvailableUsersForSector(sectorId: string, level: SectorLevelType): Promise<any[]> {
+  const idField = sectorIdFields[level];
+  
+  // Get users that are NOT already assigned to this sector
+  // and filter by geographic level if possible
+  const users = await prisma.user.findMany({
+    where: {
+      OR: [
+        { [idField]: null },
+        { [idField]: { not: sectorId } }
+      ]
+    },
+    select: {
+      id: true,
+      email: true,
+      mobileNumber: true,
+      adminLevel: true,
+      role: true,
+      regionId: true,
+      localityId: true,
+      adminUnitId: true,
+      districtId: true,
+      sectorNationalLevelId: true,
+      sectorRegionId: true,
+      sectorLocalityId: true,
+      sectorAdminUnitId: true,
+      sectorDistrictId: true,
+      profile: {
+        select: {
+          firstName: true,
+          lastName: true
+        }
+      },
+      memberDetails: {
+        select: {
+          fullName: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100 // Limit for performance
+  });
+
+  return users;
+}
+
+// Add a user to a sector
+export async function addUserToSector(userId: string, sectorId: string, level: SectorLevelType): Promise<any> {
+  const idField = sectorIdFields[level];
+  
+  return await prisma.user.update({
+    where: { id: userId },
+    data: {
+      [idField]: sectorId
+    },
+    select: {
+      id: true,
+      email: true,
+      mobileNumber: true,
+      profile: {
+        select: {
+          firstName: true,
+          lastName: true
+        }
+      }
+    }
+  });
+}
+
+// Remove a user from a sector
+export async function removeUserFromSector(userId: string, sectorId: string, level: SectorLevelType): Promise<any> {
+  const idField = sectorIdFields[level];
+  
+  // First verify the user actually belongs to the specified sector
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { [idField]: true }
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  // Check if the user belongs to the specified sector
+  if (user[idField] !== sectorId) {
+    throw new Error('User does not belong to the specified sector');
+  }
+  
+  return await prisma.user.update({
+    where: { id: userId },
+    data: {
+      [idField]: null
+    },
+    select: {
+      id: true,
+      email: true,
+      mobileNumber: true
+    }
+  });
+}
+
 // ===== FULL HIERARCHY =====
 
 export async function getFullSectorHierarchy(expatriateRegionId: string | null = null): Promise<any[]> {
@@ -708,6 +852,12 @@ export default {
   deleteSectorDistrict,
   
   // Full Hierarchy
-  getFullSectorHierarchy
+  getFullSectorHierarchy,
+  
+  // Sector Members Management
+  getSectorMembers,
+  getAvailableUsersForSector,
+  addUserToSector,
+  removeUserFromSector
 };
 
