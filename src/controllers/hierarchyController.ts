@@ -14,6 +14,283 @@ const sectorTypeNames: Record<SectorType, string> = {
   POLITICAL: 'السياسي'
 };
 
+// Admin levels that have full access
+const FULL_ACCESS_LEVELS = ['ADMIN', 'GENERAL_SECRETARIAT'];
+
+// Helper function to check if admin has full access
+function hasFullAccess(adminLevel: string | undefined): boolean {
+  return adminLevel ? FULL_ACCESS_LEVELS.includes(adminLevel) : false;
+}
+
+// Helper function to check if admin can modify a region
+async function canModifyRegion(adminUser: any, regionId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  // NATIONAL_LEVEL admin can modify regions under their national level
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    const region = await prisma.region.findUnique({
+      where: { id: regionId },
+      select: { nationalLevelId: true }
+    });
+    return region?.nationalLevelId === adminUser.nationalLevelId;
+  }
+  
+  // REGION admin can only modify their own region
+  if (adminUser.adminLevel === 'REGION') {
+    return adminUser.regionId === regionId;
+  }
+  
+  return false;
+}
+
+// Helper function to check if admin can modify a locality
+async function canModifyLocality(adminUser: any, localityId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  const locality = await prisma.locality.findUnique({
+    where: { id: localityId },
+    select: { regionId: true }
+  });
+  
+  if (!locality) return false;
+  
+  // NATIONAL_LEVEL admin can modify localities under their national level
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    const region = await prisma.region.findUnique({
+      where: { id: locality.regionId },
+      select: { nationalLevelId: true }
+    });
+    return region?.nationalLevelId === adminUser.nationalLevelId;
+  }
+  
+  // REGION admin can modify localities in their region
+  if (adminUser.adminLevel === 'REGION') {
+    return locality.regionId === adminUser.regionId;
+  }
+  
+  // LOCALITY admin can only modify their own locality
+  if (adminUser.adminLevel === 'LOCALITY') {
+    return localityId === adminUser.localityId;
+  }
+  
+  return false;
+}
+
+// Helper function to check if admin can modify an admin unit
+async function canModifyAdminUnit(adminUser: any, adminUnitId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  const adminUnit = await prisma.adminUnit.findUnique({
+    where: { id: adminUnitId },
+    select: { localityId: true, locality: { select: { regionId: true, region: { select: { nationalLevelId: true } } } } }
+  });
+  
+  if (!adminUnit) return false;
+  
+  // NATIONAL_LEVEL admin can modify admin units under their national level
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    return adminUnit.locality?.region?.nationalLevelId === adminUser.nationalLevelId;
+  }
+  
+  // REGION admin can modify admin units in their region
+  if (adminUser.adminLevel === 'REGION') {
+    return adminUnit.locality?.regionId === adminUser.regionId;
+  }
+  
+  // LOCALITY admin can modify admin units in their locality
+  if (adminUser.adminLevel === 'LOCALITY') {
+    return adminUnit.localityId === adminUser.localityId;
+  }
+  
+  // ADMIN_UNIT admin can only modify their own admin unit
+  if (adminUser.adminLevel === 'ADMIN_UNIT') {
+    return adminUnitId === adminUser.adminUnitId;
+  }
+  
+  return false;
+}
+
+// Helper function to check if admin can modify a district
+async function canModifyDistrict(adminUser: any, districtId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  const district = await prisma.district.findUnique({
+    where: { id: districtId },
+    select: { 
+      adminUnitId: true, 
+      adminUnit: { 
+        select: { 
+          localityId: true,
+          locality: { 
+            select: { 
+              regionId: true,
+              region: { select: { nationalLevelId: true } }
+            } 
+          } 
+        } 
+      } 
+    }
+  });
+  
+  if (!district) return false;
+  
+  // NATIONAL_LEVEL admin can modify districts under their national level
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    return district.adminUnit?.locality?.region?.nationalLevelId === adminUser.nationalLevelId;
+  }
+  
+  // REGION admin can modify districts in their region
+  if (adminUser.adminLevel === 'REGION') {
+    return district.adminUnit?.locality?.regionId === adminUser.regionId;
+  }
+  
+  // LOCALITY admin can modify districts in their locality
+  if (adminUser.adminLevel === 'LOCALITY') {
+    return district.adminUnit?.localityId === adminUser.localityId;
+  }
+  
+  // ADMIN_UNIT admin can modify districts in their admin unit
+  if (adminUser.adminLevel === 'ADMIN_UNIT') {
+    return district.adminUnitId === adminUser.adminUnitId;
+  }
+  
+  // DISTRICT admin can only modify their own district
+  if (adminUser.adminLevel === 'DISTRICT') {
+    return districtId === adminUser.districtId;
+  }
+  
+  return false;
+}
+
+// Helper function to check if admin can create in a region
+async function canCreateInRegion(adminUser: any, regionId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  // Check if the admin's region matches or is a parent of the target region
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    const region = await prisma.region.findUnique({
+      where: { id: regionId },
+      select: { nationalLevelId: true }
+    });
+    return region?.nationalLevelId === adminUser.nationalLevelId;
+  }
+  
+  if (adminUser.adminLevel === 'REGION') {
+    return regionId === adminUser.regionId;
+  }
+  
+  return false;
+}
+
+// Helper function to check if admin can create in a locality
+async function canCreateInLocality(adminUser: any, localityId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  const locality = await prisma.locality.findUnique({
+    where: { id: localityId },
+    select: { regionId: true, region: { select: { nationalLevelId: true } } }
+  });
+  
+  if (!locality) return false;
+  
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    return locality.region?.nationalLevelId === adminUser.nationalLevelId;
+  }
+  
+  if (adminUser.adminLevel === 'REGION') {
+    return locality.regionId === adminUser.regionId;
+  }
+  
+  if (adminUser.adminLevel === 'LOCALITY') {
+    return localityId === adminUser.localityId;
+  }
+  
+  return false;
+}
+
+// Helper function to check if admin can create in an admin unit
+async function canCreateInAdminUnit(adminUser: any, adminUnitId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  const adminUnit = await prisma.adminUnit.findUnique({
+    where: { id: adminUnitId },
+    select: { localityId: true, locality: { select: { regionId: true, region: { select: { nationalLevelId: true } } } } }
+  });
+  
+  if (!adminUnit) return false;
+  
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    return adminUnit.locality?.region?.nationalLevelId === adminUser.nationalLevelId;
+  }
+  
+  if (adminUser.adminLevel === 'REGION') {
+    return adminUnit.locality?.regionId === adminUser.regionId;
+  }
+  
+  if (adminUser.adminLevel === 'LOCALITY') {
+    return adminUnit.localityId === adminUser.localityId;
+  }
+  
+  if (adminUser.adminLevel === 'ADMIN_UNIT') {
+    return adminUnitId === adminUser.adminUnitId;
+  }
+  
+  return false;
+}
+
+// Helper function to validate that a user can be assigned as admin within hierarchy scope
+async function canAssignAsAdmin(adminUser: any, targetUserId: string): Promise<boolean> {
+  if (!adminUser || !targetUserId) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  // Get the target user's hierarchy information
+  const targetUser = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    select: {
+      regionId: true,
+      localityId: true,
+      adminUnitId: true,
+      districtId: true,
+      region: { select: { nationalLevelId: true } }
+    }
+  });
+  
+  if (!targetUser) return false;
+  
+  // Check if target user is within the assigning admin's hierarchy scope
+  switch (adminUser.adminLevel) {
+    case 'NATIONAL_LEVEL':
+      // Can assign users within their national level
+      return targetUser.region?.nationalLevelId === adminUser.nationalLevelId;
+      
+    case 'REGION':
+      // Can assign users within their region
+      return targetUser.regionId === adminUser.regionId;
+      
+    case 'LOCALITY':
+      // Can assign users within their locality
+      return targetUser.localityId === adminUser.localityId;
+      
+    case 'ADMIN_UNIT':
+      // Can assign users within their admin unit
+      return targetUser.adminUnitId === adminUser.adminUnitId;
+      
+    case 'DISTRICT':
+      // Can assign users within their district
+      return targetUser.districtId === adminUser.districtId;
+      
+    default:
+      return false;
+  }
+}
+
 // Helper function to auto-create 4 sectors for a new geographic level
 // NOTE: For the original (geographic) hierarchy we only need the 4 sectors per level,
 // we don't need to link them through SectorNationalLevel / expatriate hierarchy.
@@ -130,16 +407,21 @@ export const getRegions = async (req: AuthenticatedRequest, res: Response, _next
           break;
           
         default:
-          // For other roles, restrict to their specific level
+          // For other roles (USER, etc.), restrict to their specific region
+          // If no regionId is assigned, return empty results for security
           if (regionId) {
             console.log('👤 Regular user with regionId:', regionId);
             whereClause.id = regionId;
           } else {
-            console.log('⚠️ User has no regionId assigned!');
+            console.log('⚠️ User has no regionId assigned - returning empty for security');
+            // Set impossible condition to return no results
+            whereClause.id = 'none';
           }
       }
     } else {
       console.log('⚠️ No user information in request! Authentication may have failed.');
+      // For security, return no results if no user info
+      whereClause.id = 'none';
     }
     
     console.log('🔍 Finding regions with whereClause:', whereClause);
@@ -280,6 +562,18 @@ export const updateRegion = async (req: AuthenticatedRequest, res: Response, _ne
     const { id } = req.params;
     const { name, code, description, adminId, active, nationalLevelId } = req.body;
     
+    // Verify admin has permission to modify this region
+    if (!await canModifyRegion(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this region' });
+      return;
+    }
+    
+    // If assigning an admin, verify the user is within the admin's hierarchy scope
+    if (adminId && !await canAssignAsAdmin(req.user, adminId)) {
+      res.status(403).json({ error: 'Forbidden - You can only assign users within your hierarchy scope as admins' });
+      return;
+    }
+    
     // If nationalLevelId is being updated, verify it exists
     if (nationalLevelId !== undefined) {
       const nationalLevel = await prisma.nationalLevel.findUnique({
@@ -326,6 +620,12 @@ export const updateRegionStatus = async (req: AuthenticatedRequest, res: Respons
     const { id } = req.params;
     const { active } = req.body;
 
+    // Verify admin has permission to modify this region
+    if (!await canModifyRegion(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this region' });
+      return;
+    }
+
     if (typeof active !== 'boolean') {
       res.status(400).json({ error: 'Active status must be a boolean value' });
       return;
@@ -351,6 +651,13 @@ export const updateRegionStatus = async (req: AuthenticatedRequest, res: Respons
 export const deleteRegion = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
+    
+    // Verify admin has permission to modify this region
+    if (!await canModifyRegion(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to delete this region' });
+      return;
+    }
+    
     await prisma.region.delete({
       where: { id }
     });
@@ -459,6 +766,12 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
 
+    // Verify admin has permission to create in this region
+    if (!await canCreateInRegion(req.user, regionId)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to create localities in this region' });
+      return;
+    }
+
     // Verify region exists
     const region = await prisma.region.findUnique({
       where: { id: regionId }
@@ -511,6 +824,18 @@ export const updateLocality = async (req: AuthenticatedRequest, res: Response, _
     const { id } = req.params;
     const { name, code, description, regionId, adminId, active } = req.body;
     
+    // Verify admin has permission to modify this locality
+    if (!await canModifyLocality(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this locality' });
+      return;
+    }
+    
+    // If assigning an admin, verify the user is within the admin's hierarchy scope
+    if (adminId && !await canAssignAsAdmin(req.user, adminId)) {
+      res.status(403).json({ error: 'Forbidden - You can only assign users within your hierarchy scope as admins' });
+      return;
+    }
+    
     const locality = await prisma.locality.update({
       where: { id },
       data: {
@@ -544,6 +869,12 @@ export const updateLocalityStatus = async (req: AuthenticatedRequest, res: Respo
     const { id } = req.params;
     const { active } = req.body;
 
+    // Verify admin has permission to modify this locality
+    if (!await canModifyLocality(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this locality' });
+      return;
+    }
+
     if (typeof active !== 'boolean') {
       res.status(400).json({ error: 'Active status must be a boolean value' });
       return;
@@ -570,6 +901,13 @@ export const updateLocalityStatus = async (req: AuthenticatedRequest, res: Respo
 export const deleteLocality = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
+    
+    // Verify admin has permission to modify this locality
+    if (!await canModifyLocality(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to delete this locality' });
+      return;
+    }
+    
     await prisma.locality.delete({
       where: { id }
     });
@@ -682,6 +1020,12 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
       return;
     }
 
+    // Verify admin has permission to create in this locality
+    if (!await canCreateInLocality(req.user, localityId)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to create admin units in this locality' });
+      return;
+    }
+
     // Verify locality exists
     const locality = await prisma.locality.findUnique({
       where: { id: localityId }
@@ -734,6 +1078,18 @@ export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, 
     const { id } = req.params;
     const { name, code, description, localityId, adminId, active } = req.body;
     
+    // Verify admin has permission to modify this admin unit
+    if (!await canModifyAdminUnit(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this administrative unit' });
+      return;
+    }
+    
+    // If assigning an admin, verify the user is within the admin's hierarchy scope
+    if (adminId && !await canAssignAsAdmin(req.user, adminId)) {
+      res.status(403).json({ error: 'Forbidden - You can only assign users within your hierarchy scope as admins' });
+      return;
+    }
+    
     const adminUnit = await prisma.adminUnit.update({
       where: { id },
       data: {
@@ -767,6 +1123,12 @@ export const updateAdminUnitStatus = async (req: AuthenticatedRequest, res: Resp
     const { id } = req.params;
     const { active } = req.body;
 
+    // Verify admin has permission to modify this admin unit
+    if (!await canModifyAdminUnit(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this administrative unit' });
+      return;
+    }
+
     if (typeof active !== 'boolean') {
       res.status(400).json({ error: 'Active status must be a boolean value' });
       return;
@@ -797,6 +1159,13 @@ export const updateAdminUnitStatus = async (req: AuthenticatedRequest, res: Resp
 export const deleteAdminUnit = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
+    
+    // Verify admin has permission to modify this admin unit
+    if (!await canModifyAdminUnit(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to delete this administrative unit' });
+      return;
+    }
+    
     await prisma.adminUnit.delete({
       where: { id }
     });
@@ -933,6 +1302,12 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
 
+    // Verify admin has permission to create in this admin unit
+    if (!await canCreateInAdminUnit(req.user, adminUnitId)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to create districts in this administrative unit' });
+      return;
+    }
+
     // Verify admin unit exists
     const adminUnit = await prisma.adminUnit.findUnique({
       where: { id: adminUnitId }
@@ -985,6 +1360,18 @@ export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _
     const { id } = req.params;
     const { name, code, description, adminUnitId, adminId, active } = req.body;
     
+    // Verify admin has permission to modify this district
+    if (!await canModifyDistrict(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this district' });
+      return;
+    }
+    
+    // If assigning an admin, verify the user is within the admin's hierarchy scope
+    if (adminId && !await canAssignAsAdmin(req.user, adminId)) {
+      res.status(403).json({ error: 'Forbidden - You can only assign users within your hierarchy scope as admins' });
+      return;
+    }
+    
     const district = await prisma.district.update({
       where: { id },
       data: {
@@ -1018,6 +1405,12 @@ export const updateDistrictStatus = async (req: AuthenticatedRequest, res: Respo
     const { id } = req.params;
     const { active } = req.body;
 
+    // Verify admin has permission to modify this district
+    if (!await canModifyDistrict(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to modify this district' });
+      return;
+    }
+
     if (typeof active !== 'boolean') {
       res.status(400).json({ error: 'Active status must be a boolean value' });
       return;
@@ -1050,6 +1443,13 @@ export const updateDistrictStatus = async (req: AuthenticatedRequest, res: Respo
 export const deleteDistrict = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
+    
+    // Verify admin has permission to modify this district
+    if (!await canModifyDistrict(req.user, id)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to delete this district' });
+      return;
+    }
+    
     await prisma.district.delete({
       where: { id }
     });

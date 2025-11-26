@@ -553,39 +553,49 @@ export async function getAllUsers(page: number = 1, limit: number = 10, adminUse
   
   // Apply hierarchical access control if adminUser is provided
   if (adminUser) {
-    const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+    const { adminLevel, nationalLevelId, regionId, localityId, adminUnitId, districtId } = adminUser;
     
     switch (adminLevel) {
+      case 'ADMIN':
       case 'GENERAL_SECRETARIAT':
-        // General Secretariat can see all users
+        // Admin and General Secretariat can see all users
+        break;
+        
+      case 'NATIONAL_LEVEL':
+        // National level admin can see users in their national level hierarchy
+        if (nationalLevelId) {
+          where.region = { nationalLevelId };
+        }
         break;
         
       case 'REGION':
         // Region admin can see users in their region and all sub-levels
-        where.regionId = regionId;
+        if (regionId) where.regionId = regionId;
         break;
         
       case 'LOCALITY':
         // Locality admin can see users in their locality and all sub-levels
-        where.localityId = localityId;
+        if (localityId) where.localityId = localityId;
         break;
         
       case 'ADMIN_UNIT':
         // Admin unit admin can see users in their admin unit and all sub-levels
-        where.adminUnitId = adminUnitId;
+        if (adminUnitId) where.adminUnitId = adminUnitId;
         break;
         
       case 'DISTRICT':
         // District admin can only see users in their district
-        where.districtId = districtId;
+        if (districtId) where.districtId = districtId;
         break;
         
       default:
         // For other roles, restrict to their specific level
+        // If no hierarchy assigned, return no users for security
         if (districtId) where.districtId = districtId;
         else if (adminUnitId) where.adminUnitId = adminUnitId;
         else if (localityId) where.localityId = localityId;
         else if (regionId) where.regionId = regionId;
+        else where.id = 'none'; // Return no users if no hierarchy assigned
     }
   }
   
@@ -644,39 +654,49 @@ export async function getMemberships(status: string | null, role: string | null,
     
     // Apply hierarchical access control if adminUser is provided
     if (adminUser) {
-      const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+      const { adminLevel, nationalLevelId, regionId, localityId, adminUnitId, districtId } = adminUser;
       
       switch (adminLevel) {
+        case 'ADMIN':
         case 'GENERAL_SECRETARIAT':
-          // General Secretariat can see all users
+          // Admin and General Secretariat can see all users
+          break;
+          
+        case 'NATIONAL_LEVEL':
+          // National level admin can see users in their national level hierarchy
+          if (nationalLevelId) {
+            whereClause.region = { nationalLevelId };
+          }
           break;
           
         case 'REGION':
           // Region admin can see users in their region and all sub-levels
-          whereClause.regionId = regionId;
+          if (regionId) whereClause.regionId = regionId;
           break;
           
         case 'LOCALITY':
           // Locality admin can see users in their locality and all sub-levels
-          whereClause.localityId = localityId;
+          if (localityId) whereClause.localityId = localityId;
           break;
           
         case 'ADMIN_UNIT':
           // Admin unit admin can see users in their admin unit and all sub-levels
-          whereClause.adminUnitId = adminUnitId;
+          if (adminUnitId) whereClause.adminUnitId = adminUnitId;
           break;
           
         case 'DISTRICT':
           // District admin can only see users in their district
-          whereClause.districtId = districtId;
+          if (districtId) whereClause.districtId = districtId;
           break;
           
         default:
           // For other roles, restrict to their specific level
+          // If no hierarchy assigned, return no users for security
           if (districtId) whereClause.districtId = districtId;
           else if (adminUnitId) whereClause.adminUnitId = adminUnitId;
           else if (localityId) whereClause.localityId = localityId;
           else if (regionId) whereClause.regionId = regionId;
+          else whereClause.id = 'none'; // Return no users if no hierarchy assigned
       }
     }
     
