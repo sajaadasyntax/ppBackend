@@ -2,9 +2,12 @@ import prisma from '../utils/prisma';
 
 // ===== SECTOR NATIONAL LEVEL =====
 
-export async function getAllSectorNationalLevels(expatriateRegionId: string | null = null): Promise<any[]> {
+export async function getAllSectorNationalLevels(expatriateRegionId: string | null = null, originalOnly: boolean = false): Promise<any[]> {
   const where: any = { active: true };
-  if (expatriateRegionId) {
+  if (originalOnly) {
+    // Original hierarchy sectors have no expatriateRegionId
+    where.expatriateRegionId = null;
+  } else if (expatriateRegionId) {
     where.expatriateRegionId = expatriateRegionId;
   }
   
@@ -105,12 +108,15 @@ export async function deleteSectorNationalLevel(id: string): Promise<any> {
 
 // ===== SECTOR REGION =====
 
-export async function getAllSectorRegions(sectorNationalLevelId: string | null = null, expatriateRegionId: string | null = null): Promise<any[]> {
+export async function getAllSectorRegions(sectorNationalLevelId: string | null = null, expatriateRegionId: string | null = null, originalOnly: boolean = false): Promise<any[]> {
   const where: any = { active: true };
   if (sectorNationalLevelId) {
     where.sectorNationalLevelId = sectorNationalLevelId;
   }
-  if (expatriateRegionId) {
+  if (originalOnly) {
+    // Original hierarchy sectors have no expatriateRegionId
+    where.expatriateRegionId = null;
+  } else if (expatriateRegionId) {
     where.expatriateRegionId = expatriateRegionId;
   }
   
@@ -238,12 +244,15 @@ export async function deleteSectorRegion(id: string): Promise<any> {
 
 // ===== SECTOR LOCALITY =====
 
-export async function getAllSectorLocalities(sectorRegionId: string | null = null, expatriateRegionId: string | null = null): Promise<any[]> {
+export async function getAllSectorLocalities(sectorRegionId: string | null = null, expatriateRegionId: string | null = null, originalOnly: boolean = false): Promise<any[]> {
   const where: any = { active: true };
   if (sectorRegionId) {
     where.sectorRegionId = sectorRegionId;
   }
-  if (expatriateRegionId) {
+  if (originalOnly) {
+    // Original hierarchy sectors have no expatriateRegionId
+    where.expatriateRegionId = null;
+  } else if (expatriateRegionId) {
     where.expatriateRegionId = expatriateRegionId;
   }
   
@@ -371,12 +380,15 @@ export async function deleteSectorLocality(id: string): Promise<any> {
 
 // ===== SECTOR ADMIN UNIT =====
 
-export async function getAllSectorAdminUnits(sectorLocalityId: string | null = null, expatriateRegionId: string | null = null): Promise<any[]> {
+export async function getAllSectorAdminUnits(sectorLocalityId: string | null = null, expatriateRegionId: string | null = null, originalOnly: boolean = false): Promise<any[]> {
   const where: any = { active: true };
   if (sectorLocalityId) {
     where.sectorLocalityId = sectorLocalityId;
   }
-  if (expatriateRegionId) {
+  if (originalOnly) {
+    // Original hierarchy sectors have no expatriateRegionId
+    where.expatriateRegionId = null;
+  } else if (expatriateRegionId) {
     where.expatriateRegionId = expatriateRegionId;
   }
   
@@ -504,12 +516,15 @@ export async function deleteSectorAdminUnit(id: string): Promise<any> {
 
 // ===== SECTOR DISTRICT =====
 
-export async function getAllSectorDistricts(sectorAdminUnitId: string | null = null, expatriateRegionId: string | null = null): Promise<any[]> {
+export async function getAllSectorDistricts(sectorAdminUnitId: string | null = null, expatriateRegionId: string | null = null, originalOnly: boolean = false): Promise<any[]> {
   const where: any = { active: true };
   if (sectorAdminUnitId) {
     where.sectorAdminUnitId = sectorAdminUnitId;
   }
-  if (expatriateRegionId) {
+  if (originalOnly) {
+    // Original hierarchy sectors have no expatriateRegionId
+    where.expatriateRegionId = null;
+  } else if (expatriateRegionId) {
     where.expatriateRegionId = expatriateRegionId;
   }
   

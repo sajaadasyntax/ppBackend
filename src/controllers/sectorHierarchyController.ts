@@ -6,8 +6,9 @@ import { AuthenticatedRequest } from '../types';
 
 export const getAllSectorNationalLevels = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { expatriateRegionId } = req.query;
-    const levels = await sectorHierarchyService.getAllSectorNationalLevels(expatriateRegionId as string);
+    const { expatriateRegionId, originalOnly } = req.query;
+    const isOriginalOnly = originalOnly === 'true';
+    const levels = await sectorHierarchyService.getAllSectorNationalLevels(expatriateRegionId as string, isOriginalOnly);
     res.json(levels);
   } catch (error: any) {
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
@@ -75,10 +76,12 @@ export const deleteSectorNationalLevel = async (req: AuthenticatedRequest, res: 
 
 export const getAllSectorRegions = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorNationalLevelId, expatriateRegionId } = req.query;
+    const { sectorNationalLevelId, expatriateRegionId, originalOnly } = req.query;
+    const isOriginalOnly = originalOnly === 'true';
     const regions = await sectorHierarchyService.getAllSectorRegions(
       sectorNationalLevelId as string,
-      expatriateRegionId as string
+      expatriateRegionId as string,
+      isOriginalOnly
     );
     res.json(regions);
   } catch (error: any) {
@@ -143,10 +146,12 @@ export const deleteSectorRegion = async (req: AuthenticatedRequest, res: Respons
 
 export const getAllSectorLocalities = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorRegionId, expatriateRegionId } = req.query;
+    const { sectorRegionId, expatriateRegionId, originalOnly } = req.query;
+    const isOriginalOnly = originalOnly === 'true';
     const localities = await sectorHierarchyService.getAllSectorLocalities(
       sectorRegionId as string,
-      expatriateRegionId as string
+      expatriateRegionId as string,
+      isOriginalOnly
     );
     res.json(localities);
   } catch (error: any) {
