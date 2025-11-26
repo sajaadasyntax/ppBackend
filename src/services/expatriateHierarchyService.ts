@@ -1,4 +1,37 @@
 import prisma from '../utils/prisma';
+import { SectorType } from '@prisma/client';
+
+// Fixed 4 sector types
+const FIXED_SECTOR_TYPES: SectorType[] = ['SOCIAL', 'ECONOMIC', 'ORGANIZATIONAL', 'POLITICAL'];
+
+const sectorTypeNames: Record<SectorType, string> = {
+  SOCIAL: 'الاجتماعي',
+  ECONOMIC: 'الاقتصادي',
+  ORGANIZATIONAL: 'التنظيمي',
+  POLITICAL: 'السياسي'
+};
+
+// Helper function to auto-create 4 sectors for a new expatriate region
+async function createSectorsForExpatriateRegion(expatriateRegionId: string, regionName: string): Promise<void> {
+  try {
+    // Create 4 SectorNationalLevel entries for this expatriate region
+    for (const sectorType of FIXED_SECTOR_TYPES) {
+      await prisma.sectorNationalLevel.create({
+        data: {
+          name: `${regionName} - ${sectorTypeNames[sectorType]}`,
+          sectorType,
+          active: true,
+          expatriateRegionId
+        }
+      });
+    }
+    
+    console.log(`✅ Created 4 sectors for expatriate region: ${regionName}`);
+  } catch (error) {
+    console.error(`⚠️ Error creating sectors for expatriate region:`, error);
+    // Don't throw - sector creation failure shouldn't block region creation
+  }
+}
 
 /**
  * Get all expatriate regions
@@ -79,7 +112,7 @@ export async function createExpatriateRegion(data: any): Promise<any> {
     ? data.description.trim()
     : undefined;
 
-  return await prisma.expatriateRegion.create({
+  const region = await prisma.expatriateRegion.create({
     data: {
       name: trimmedName,
       code: normalizedCode,
@@ -87,6 +120,11 @@ export async function createExpatriateRegion(data: any): Promise<any> {
       active: data.active !== undefined ? data.active : true
     }
   });
+  
+  // Auto-create 4 sectors for this expatriate region
+  await createSectorsForExpatriateRegion(region.id, trimmedName);
+  
+  return region;
 }
 
 /**

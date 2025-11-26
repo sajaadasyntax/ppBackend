@@ -2,7 +2,167 @@ import { Response, NextFunction } from 'express';
 import prisma from '../utils/prisma';
 import userService from '../services/userService';
 import { AuthenticatedRequest } from '../types';
-import { Prisma } from '@prisma/client';
+import { Prisma, SectorType } from '@prisma/client';
+
+// Fixed 4 sector types
+const FIXED_SECTOR_TYPES: SectorType[] = ['SOCIAL', 'ECONOMIC', 'ORGANIZATIONAL', 'POLITICAL'];
+
+const sectorTypeNames: Record<SectorType, string> = {
+  SOCIAL: 'الاجتماعي',
+  ECONOMIC: 'الاقتصادي',
+  ORGANIZATIONAL: 'التنظيمي',
+  POLITICAL: 'السياسي'
+};
+
+// Helper function to auto-create 4 sectors for a new geographic level
+async function createSectorsForLevel(
+  level: 'region' | 'locality' | 'adminUnit' | 'district',
+  entityId: string,
+  entityName: string
+): Promise<void> {
+  try {
+    switch (level) {
+      case 'region':
+        // Get the region with its national level
+        const region = await prisma.region.findUnique({
+          where: { id: entityId },
+          select: { nationalLevelId: true, name: true }
+        });
+        
+        if (region?.nationalLevelId) {
+          for (const sectorType of FIXED_SECTOR_TYPES) {
+            // Find or create a SectorNationalLevel specific to this national level and sector type
+            let sectorNationalLevel = await prisma.sectorNationalLevel.findFirst({
+              where: {
+                sectorType: sectorType,
+                expatriateRegionId: null,
+                // Use name pattern to identify national level specific sectors
+                name: { startsWith: 'القطاع' }
+              }
+            });
+            
+            if (!sectorNationalLevel) {
+              sectorNationalLevel = await prisma.sectorNationalLevel.create({
+                data: {
+                  name: `القطاع ${sectorTypeNames[sectorType]}`,
+                  sectorType: sectorType,
+                  active: true
+                  // No expatriateRegionId = original hierarchy
+                }
+              });
+            }
+
+            // Create SectorRegion linked to this national level sector
+            await prisma.sectorRegion.create({
+              data: {
+                name: `${entityName} - ${sectorTypeNames[sectorType]}`,
+                sectorType: sectorType,
+                active: true,
+                sectorNationalLevelId: sectorNationalLevel.id
+                // No expatriateRegionId = original hierarchy
+              }
+            });
+          }
+        }
+        break;
+        
+      case 'locality':
+        // Get the locality with its region info
+        const locality = await prisma.locality.findUnique({
+          where: { id: entityId },
+          select: { regionId: true, region: { select: { name: true } } }
+        });
+        
+        if (locality?.regionId) {
+          for (const sectorType of FIXED_SECTOR_TYPES) {
+            // Find the SectorRegion for this geographic region and sector type
+            const sectorRegion = await prisma.sectorRegion.findFirst({
+              where: {
+                sectorType: sectorType,
+                expatriateRegionId: null,
+                name: { contains: locality.region?.name || '' }
+              }
+            });
+            
+            await prisma.sectorLocality.create({
+              data: {
+                name: `${entityName} - ${sectorTypeNames[sectorType]}`,
+                sectorType: sectorType,
+                active: true,
+                sectorRegionId: sectorRegion?.id || null
+              }
+            });
+          }
+        }
+        break;
+        
+      case 'adminUnit':
+        // Get the admin unit with its locality info
+        const adminUnit = await prisma.adminUnit.findUnique({
+          where: { id: entityId },
+          select: { localityId: true, locality: { select: { name: true } } }
+        });
+        
+        if (adminUnit?.localityId) {
+          for (const sectorType of FIXED_SECTOR_TYPES) {
+            // Find the SectorLocality for this geographic locality and sector type
+            const sectorLocality = await prisma.sectorLocality.findFirst({
+              where: {
+                sectorType: sectorType,
+                expatriateRegionId: null,
+                name: { contains: adminUnit.locality?.name || '' }
+              }
+            });
+            
+            await prisma.sectorAdminUnit.create({
+              data: {
+                name: `${entityName} - ${sectorTypeNames[sectorType]}`,
+                sectorType: sectorType,
+                active: true,
+                sectorLocalityId: sectorLocality?.id || null
+              }
+            });
+          }
+        }
+        break;
+        
+      case 'district':
+        // Get the district with its admin unit info
+        const district = await prisma.district.findUnique({
+          where: { id: entityId },
+          select: { adminUnitId: true, adminUnit: { select: { name: true } } }
+        });
+        
+        if (district?.adminUnitId) {
+          for (const sectorType of FIXED_SECTOR_TYPES) {
+            // Find the SectorAdminUnit for this geographic admin unit and sector type
+            const sectorAdminUnit = await prisma.sectorAdminUnit.findFirst({
+              where: {
+                sectorType: sectorType,
+                expatriateRegionId: null,
+                name: { contains: district.adminUnit?.name || '' }
+              }
+            });
+            
+            await prisma.sectorDistrict.create({
+              data: {
+                name: `${entityName} - ${sectorTypeNames[sectorType]}`,
+                sectorType: sectorType,
+                active: true,
+                sectorAdminUnitId: sectorAdminUnit?.id || null
+              }
+            });
+          }
+        }
+        break;
+    }
+    
+    console.log(`✅ Created 4 sectors for ${level}: ${entityName}`);
+  } catch (error) {
+    console.error(`⚠️ Error creating sectors for ${level}:`, error);
+    // Don't throw - sector creation failure shouldn't block hierarchy creation
+  }
+}
 
 // Get all regions
 export const getRegions = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
@@ -179,6 +339,9 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
         adminId: adminId || undefined
       }
     });
+    
+    // Auto-create 4 sectors for this region
+    await createSectorsForLevel('region', region.id, trimmedName);
     
     res.status(201).json(region);
   } catch (error: any) {
@@ -404,6 +567,9 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
       }
     });
     
+    // Auto-create 4 sectors for this locality
+    await createSectorsForLevel('locality', locality.id, trimmedName);
+    
     res.status(201).json(locality);
   } catch (error: any) {
     console.error('Error creating locality:', error);
@@ -623,6 +789,9 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
         adminId: adminId || undefined
       }
     });
+    
+    // Auto-create 4 sectors for this admin unit
+    await createSectorsForLevel('adminUnit', adminUnit.id, trimmedName);
     
     res.status(201).json(adminUnit);
   } catch (error: any) {
@@ -871,6 +1040,9 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
         adminId: adminId || undefined
       }
     });
+    
+    // Auto-create 4 sectors for this district
+    await createSectorsForLevel('district', district.id, trimmedName);
     
     res.status(201).json(district);
   } catch (error: any) {
