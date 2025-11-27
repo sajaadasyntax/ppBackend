@@ -6,9 +6,10 @@ import { AuthenticatedRequest } from '../types';
 
 export const getAllSectorNationalLevels = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { expatriateRegionId, originalOnly } = req.query;
+    const { expatriateRegionId, originalOnly, expatriateOnly } = req.query;
     const isOriginalOnly = originalOnly === 'true';
-    const levels = await sectorHierarchyService.getAllSectorNationalLevels(expatriateRegionId as string, isOriginalOnly);
+    const isExpatriateOnly = expatriateOnly === 'true';
+    const levels = await sectorHierarchyService.getAllSectorNationalLevels(expatriateRegionId as string, isOriginalOnly, isExpatriateOnly);
     res.json(levels);
   } catch (error: any) {
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
@@ -76,12 +77,14 @@ export const deleteSectorNationalLevel = async (req: AuthenticatedRequest, res: 
 
 export const getAllSectorRegions = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorNationalLevelId, expatriateRegionId, originalOnly } = req.query;
+    const { sectorNationalLevelId, expatriateRegionId, originalOnly, expatriateOnly } = req.query;
     const isOriginalOnly = originalOnly === 'true';
+    const isExpatriateOnly = expatriateOnly === 'true';
     const regions = await sectorHierarchyService.getAllSectorRegions(
       sectorNationalLevelId as string,
       expatriateRegionId as string,
-      isOriginalOnly
+      isOriginalOnly,
+      isExpatriateOnly
     );
     res.json(regions);
   } catch (error: any) {
@@ -146,12 +149,14 @@ export const deleteSectorRegion = async (req: AuthenticatedRequest, res: Respons
 
 export const getAllSectorLocalities = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorRegionId, expatriateRegionId, originalOnly } = req.query;
+    const { sectorRegionId, expatriateRegionId, originalOnly, expatriateOnly } = req.query;
     const isOriginalOnly = originalOnly === 'true';
+    const isExpatriateOnly = expatriateOnly === 'true';
     const localities = await sectorHierarchyService.getAllSectorLocalities(
       sectorRegionId as string,
       expatriateRegionId as string,
-      isOriginalOnly
+      isOriginalOnly,
+      isExpatriateOnly
     );
     res.json(localities);
   } catch (error: any) {
@@ -216,12 +221,14 @@ export const deleteSectorLocality = async (req: AuthenticatedRequest, res: Respo
 
 export const getAllSectorAdminUnits = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorLocalityId, expatriateRegionId, originalOnly } = req.query;
+    const { sectorLocalityId, expatriateRegionId, originalOnly, expatriateOnly } = req.query;
     const isOriginalOnly = originalOnly === 'true';
+    const isExpatriateOnly = expatriateOnly === 'true';
     const adminUnits = await sectorHierarchyService.getAllSectorAdminUnits(
       sectorLocalityId as string,
       expatriateRegionId as string,
-      isOriginalOnly
+      isOriginalOnly,
+      isExpatriateOnly
     );
     res.json(adminUnits);
   } catch (error: any) {
@@ -286,12 +293,14 @@ export const deleteSectorAdminUnit = async (req: AuthenticatedRequest, res: Resp
 
 export const getAllSectorDistricts = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
   try {
-    const { sectorAdminUnitId, expatriateRegionId, originalOnly } = req.query;
+    const { sectorAdminUnitId, expatriateRegionId, originalOnly, expatriateOnly } = req.query;
     const isOriginalOnly = originalOnly === 'true';
+    const isExpatriateOnly = expatriateOnly === 'true';
     const districts = await sectorHierarchyService.getAllSectorDistricts(
       sectorAdminUnitId as string,
       expatriateRegionId as string,
-      isOriginalOnly
+      isOriginalOnly,
+      isExpatriateOnly
     );
     res.json(districts);
   } catch (error: any) {
@@ -395,7 +404,9 @@ export const getAvailableUsersForSector = async (req: AuthenticatedRequest, res:
       return;
     }
     
-    const users = await sectorHierarchyService.getAvailableUsersForSector(sectorId, level as SectorLevelType);
+    // Pass the requesting admin user to filter by geographic scope
+    const adminUser = req.user;
+    const users = await sectorHierarchyService.getAvailableUsersForSector(sectorId, level as SectorLevelType, adminUser);
     res.json({ success: true, data: users });
   } catch (error: any) {
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });

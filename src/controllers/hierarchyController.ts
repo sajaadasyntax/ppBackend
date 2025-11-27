@@ -166,6 +166,20 @@ async function canModifyDistrict(adminUser: any, districtId: string): Promise<bo
   return false;
 }
 
+// Helper function to check if admin can create a region under a specific national level
+async function canCreateRegionInNationalLevel(adminUser: any, nationalLevelId: string): Promise<boolean> {
+  if (!adminUser) return false;
+  if (hasFullAccess(adminUser.adminLevel)) return true;
+  
+  // NATIONAL_LEVEL admin can only create regions under their own national level
+  if (adminUser.adminLevel === 'NATIONAL_LEVEL' && adminUser.nationalLevelId) {
+    return adminUser.nationalLevelId === nationalLevelId;
+  }
+  
+  // Other admin levels cannot create regions
+  return false;
+}
+
 // Helper function to check if admin can create in a region
 async function canCreateInRegion(adminUser: any, regionId: string): Promise<boolean> {
   if (!adminUser) return false;
@@ -293,21 +307,23 @@ async function canAssignAsAdmin(adminUser: any, targetUserId: string): Promise<b
 
 // Helper function to auto-create 4 sectors for a new geographic level
 // NOTE: For the original (geographic) hierarchy we only need the 4 sectors per level,
-// we don't need to link them through SectorNationalLevel / expatriate hierarchy.
+// but we need to link them to their parent sectors in the hierarchy.
 async function createSectorsForLevel(
   level: 'region' | 'locality' | 'adminUnit' | 'district',
-  _entityId: string,
+  entityId: string,
   entityName: string
 ): Promise<void> {
   try {
     switch (level) {
       case 'region': {
+        // Regions don't have parent sectors in the geographic hierarchy
         for (const sectorType of FIXED_SECTOR_TYPES) {
           await prisma.sectorRegion.create({
             data: {
               name: `${entityName} - ${sectorTypeNames[sectorType]}`,
               sectorType,
               active: true
+              // No expatriateRegionId = original geographic hierarchy
             }
           });
         }
@@ -315,12 +331,36 @@ async function createSectorsForLevel(
       }
 
       case 'locality': {
+        // Find the parent region to get its sectors
+        const locality = await prisma.locality.findUnique({
+          where: { id: entityId },
+          select: { regionId: true, name: true, region: { select: { name: true } } }
+        });
+
+        if (!locality || !locality.regionId) {
+          console.error(`⚠️ Locality ${entityId} not found or missing regionId`);
+          break;
+        }
+
+        // Find the parent region's sectors for each sector type
+        // Sector names are formatted as "Region Name - Sector Type"
         for (const sectorType of FIXED_SECTOR_TYPES) {
+          const regionName = locality.region?.name || '';
+          const sectorRegion = await prisma.sectorRegion.findFirst({
+            where: {
+              sectorType,
+              expatriateRegionId: null, // Original hierarchy
+              name: { startsWith: `${regionName} -` }
+            }
+          });
+
           await prisma.sectorLocality.create({
             data: {
               name: `${entityName} - ${sectorTypeNames[sectorType]}`,
               sectorType,
-              active: true
+              active: true,
+              sectorRegionId: sectorRegion?.id || null,
+              // No expatriateRegionId = original geographic hierarchy
             }
           });
         }
@@ -328,12 +368,36 @@ async function createSectorsForLevel(
       }
 
       case 'adminUnit': {
+        // Find the parent locality to get its sectors
+        const adminUnit = await prisma.adminUnit.findUnique({
+          where: { id: entityId },
+          select: { localityId: true, name: true, locality: { select: { name: true } } }
+        });
+
+        if (!adminUnit || !adminUnit.localityId) {
+          console.error(`⚠️ Admin unit ${entityId} not found or missing localityId`);
+          break;
+        }
+
+        // Find the parent locality's sectors for each sector type
+        // Sector names are formatted as "Locality Name - Sector Type"
         for (const sectorType of FIXED_SECTOR_TYPES) {
+          const localityName = adminUnit.locality?.name || '';
+          const sectorLocality = await prisma.sectorLocality.findFirst({
+            where: {
+              sectorType,
+              expatriateRegionId: null, // Original hierarchy
+              name: { startsWith: `${localityName} -` }
+            }
+          });
+
           await prisma.sectorAdminUnit.create({
             data: {
               name: `${entityName} - ${sectorTypeNames[sectorType]}`,
               sectorType,
-              active: true
+              active: true,
+              sectorLocalityId: sectorLocality?.id || null,
+              // No expatriateRegionId = original geographic hierarchy
             }
           });
         }
@@ -341,12 +405,36 @@ async function createSectorsForLevel(
       }
 
       case 'district': {
+        // Find the parent admin unit to get its sectors
+        const district = await prisma.district.findUnique({
+          where: { id: entityId },
+          select: { adminUnitId: true, name: true, adminUnit: { select: { name: true } } }
+        });
+
+        if (!district || !district.adminUnitId) {
+          console.error(`⚠️ District ${entityId} not found or missing adminUnitId`);
+          break;
+        }
+
+        // Find the parent admin unit's sectors for each sector type
+        // Sector names are formatted as "Admin Unit Name - Sector Type"
         for (const sectorType of FIXED_SECTOR_TYPES) {
+          const adminUnitName = district.adminUnit?.name || '';
+          const sectorAdminUnit = await prisma.sectorAdminUnit.findFirst({
+            where: {
+              sectorType,
+              expatriateRegionId: null, // Original hierarchy
+              name: { startsWith: `${adminUnitName} -` }
+            }
+          });
+
           await prisma.sectorDistrict.create({
             data: {
               name: `${entityName} - ${sectorTypeNames[sectorType]}`,
               sectorType,
-              active: true
+              active: true,
+              sectorAdminUnitId: sectorAdminUnit?.id || null,
+              // No expatriateRegionId = original geographic hierarchy
             }
           });
         }
@@ -394,7 +482,12 @@ export const getRegions = async (req: AuthenticatedRequest, res: Response, _next
         case 'NATIONAL_LEVEL':
           // National level admin can see all regions under their national level
           console.log('🌍 National level user - filtering to nationalLevelId:', nationalLevelId);
-          whereClause.nationalLevelId = nationalLevelId || undefined;
+          if (nationalLevelId) {
+            whereClause.nationalLevelId = nationalLevelId;
+          } else {
+            console.log('⚠️ National level user has no nationalLevelId assigned - returning empty for security');
+            whereClause.id = 'none'; // Impossible condition
+          }
           break;
           
         case 'REGION':
@@ -403,7 +496,12 @@ export const getRegions = async (req: AuthenticatedRequest, res: Response, _next
         case 'DISTRICT':
           // These levels can only see their region
           console.log('🏢 Region/lower level user - filtering to regionId:', regionId);
-          whereClause.id = regionId || undefined;
+          if (regionId) {
+            whereClause.id = regionId;
+          } else {
+            console.log('⚠️ Region/lower level user has no regionId assigned - returning empty for security');
+            whereClause.id = 'none'; // Impossible condition
+          }
           break;
           
         default:
@@ -511,6 +609,12 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
 
     if (!nationalLevelId) {
       res.status(400).json({ error: 'National level ID is required' });
+      return;
+    }
+
+    // Verify admin has permission to create regions under this national level
+    if (!await canCreateRegionInNationalLevel(req.user, nationalLevelId)) {
+      res.status(403).json({ error: 'Forbidden - You do not have permission to create regions under this national level' });
       return;
     }
 
@@ -684,6 +788,13 @@ export const getLocalitiesByRegion = async (req: AuthenticatedRequest, res: Resp
     const localities = await prisma.locality.findMany({
       where: { regionId },
       include: {
+        region: {
+          select: {
+            id: true,
+            name: true,
+            nationalLevelId: true
+          }
+        },
         admin: {
           select: {
             id: true,
@@ -934,6 +1045,20 @@ export const getAdminUnitsByLocality = async (req: AuthenticatedRequest, res: Re
     const adminUnits = await prisma.adminUnit.findMany({
       where: { localityId },
       include: {
+        locality: {
+          select: {
+            id: true,
+            name: true,
+            regionId: true,
+            region: {
+              select: {
+                id: true,
+                name: true,
+                nationalLevelId: true
+              }
+            }
+          }
+        },
         admin: {
           select: {
             id: true,
@@ -1192,6 +1317,27 @@ export const getDistrictsByAdminUnit = async (req: AuthenticatedRequest, res: Re
     const districts = await prisma.district.findMany({
       where: { adminUnitId },
       include: {
+        adminUnit: {
+          select: {
+            id: true,
+            name: true,
+            localityId: true,
+            locality: {
+              select: {
+                id: true,
+                name: true,
+                regionId: true,
+                region: {
+                  select: {
+                    id: true,
+                    name: true,
+                    nationalLevelId: true
+                  }
+                }
+              }
+            }
+          }
+        },
         admin: {
           select: {
             id: true,
@@ -1564,7 +1710,12 @@ export const getNationalLevels = async (req: AuthenticatedRequest, res: Response
           
         case 'NATIONAL_LEVEL':
           // National level admin can only see their own national level
-          whereClause.id = nationalLevelId || undefined;
+          if (nationalLevelId) {
+            whereClause.id = nationalLevelId;
+          } else {
+            console.log('⚠️ National level user has no nationalLevelId assigned - returning empty for security');
+            whereClause.id = 'none'; // Impossible condition
+          }
           break;
           
         default:
