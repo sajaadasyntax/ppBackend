@@ -32,6 +32,7 @@ router.use(authenticate);
 // Bulletins routes - using the fixed bulletin controller
 router.get('/bulletins', bulletinController.getBulletins);
 router.get('/bulletins/hierarchical', bulletinController.getBulletins); // Added this endpoint for mobile app
+router.get('/bulletins/:id', bulletinController.getBulletinById); // Get single bulletin by ID
 router.post('/bulletins', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), bulletinController.createBulletin);
 router.put('/bulletins/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), bulletinController.updateBulletin);
 router.delete('/bulletins/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), bulletinController.deleteBulletin);

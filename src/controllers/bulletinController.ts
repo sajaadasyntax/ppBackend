@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import * as contentService from '../services/contentService';
 import HierarchyService from '../services/hierarchyService';
+import { buildBulletinWhereClause } from '../services/multiHierarchyFilterService';
 import * as path from 'path';
 import * as fs from 'fs';
 import multer from 'multer';
@@ -51,6 +52,58 @@ export const getBulletins = async (req: AuthenticatedRequest, res: Response): Pr
     res.json(bulletins);
   } catch (error) {
     console.error('Error in getBulletins controller:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get a single bulletin by ID with hierarchical access control
+export const getBulletinById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const adminUser = req.user;
+    
+    // Build hierarchical where clause based on user's hierarchy
+    const hierarchyFilter = await buildBulletinWhereClause(adminUser);
+    
+    // Find bulletin with hierarchy filter to ensure user has access
+    const bulletin = await prisma.bulletin.findFirst({
+      where: {
+        id,
+        ...hierarchyFilter, // Apply hierarchical access control
+      },
+      include: {
+        targetNationalLevel: { select: { id: true, name: true } },
+        targetRegion: { select: { id: true, name: true } },
+        targetLocality: { select: { id: true, name: true } },
+        targetAdminUnit: { select: { id: true, name: true } },
+        targetDistrict: { select: { id: true, name: true } },
+        targetExpatriateRegion: { select: { id: true, name: true } },
+        targetSectorNationalLevel: { select: { id: true, name: true } },
+        targetSectorRegion: { select: { id: true, name: true } },
+        targetSectorLocality: { select: { id: true, name: true } },
+        targetSectorAdminUnit: { select: { id: true, name: true } },
+        targetSectorDistrict: { select: { id: true, name: true } },
+      }
+    });
+    
+    if (!bulletin) {
+      // Check if bulletin exists but user doesn't have access
+      const bulletinExists = await prisma.bulletin.findUnique({
+        where: { id },
+        select: { id: true }
+      });
+      
+      if (bulletinExists) {
+        res.status(403).json({ error: 'You do not have permission to view this bulletin' });
+      } else {
+        res.status(404).json({ error: 'Bulletin not found' });
+      }
+      return;
+    }
+    
+    res.json(bulletin);
+  } catch (error) {
+    console.error('Error in getBulletinById controller:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

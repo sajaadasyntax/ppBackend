@@ -21,6 +21,7 @@ import subscriptionRoutes from './routes/subscriptionRoutes';
 import publicRoutes from './routes/publicRoutes';
 import chatRoutes from './routes/chatRoutes';
 import deletionRequestRoutes from './routes/deletionRequestRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 
 // Import error handler
 import errorHandler from './middlewares/errorHandler';
@@ -148,6 +149,7 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/deletion-requests', deletionRequestRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
