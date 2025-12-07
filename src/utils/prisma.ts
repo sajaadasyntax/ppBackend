@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 // import * as fs from 'fs'; // Reserved for future use
 // import * as path from 'path'; // Reserved for future use
 
@@ -6,8 +8,17 @@ import { PrismaClient } from '@prisma/client';
 // const sqliteDbPath = path.join(__dirname, '../../prisma/dev.db'); // Reserved for future use
 // const sqliteExists = fs.existsSync(sqliteDbPath); // Reserved for future use
 
+// Create PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Create Prisma adapter
+const adapter = new PrismaPg(pool);
+
 // Create Prisma client with connection retry logic and fallback mechanism
 const prisma = new PrismaClient({
+  adapter,
   log: ['warn', 'error'],
   errorFormat: 'pretty',
 });
