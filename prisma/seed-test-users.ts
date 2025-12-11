@@ -311,7 +311,7 @@ async function createTestUsers() {
 
     // Expatriate Region Admin
     testUsers.push({
-      mobileNumber: `+249222222${String(index + 1).padStart(3, '0')}`,
+      mobileNumber: `+249212222${String(index + 1).padStart(3, '0')}`,
       email: `expat.region.${index + 1}@test.com`,
       firstName: `مدير`,
       lastName: expatRegion.name,
@@ -323,7 +323,7 @@ async function createTestUsers() {
 
     // Expatriate Regular User
     testUsers.push({
-      mobileNumber: `+249333333${String(index + 1).padStart(3, '0')}`,
+      mobileNumber: `+249213333${String(index + 1).padStart(3, '0')}`,
       email: `expat.user.${index + 1}@test.com`,
       firstName: `مغترب`,
       lastName: expatRegion.name,
@@ -339,7 +339,7 @@ async function createTestUsers() {
   hierarchy.sectorRegions.forEach((sectorRegion, index) => {
     // Sector Region Admin
     testUsers.push({
-      mobileNumber: `+249411111${String(index + 1).padStart(3, '0')}`,
+      mobileNumber: `+249311111${String(index + 1).padStart(3, '0')}`,
       email: `sector.region.${index + 1}@test.com`,
       firstName: `مدير`,
       lastName: sectorRegion.name,
@@ -351,7 +351,7 @@ async function createTestUsers() {
 
     // Sector Region Regular User
     testUsers.push({
-      mobileNumber: `+249422222${String(index + 1).padStart(3, '0')}`,
+      mobileNumber: `+249312222${String(index + 1).padStart(3, '0')}`,
       email: `sector.user.${index + 1}@test.com`,
       firstName: `عضو`,
       lastName: sectorRegion.name,
@@ -365,7 +365,7 @@ async function createTestUsers() {
     sectorRegion.sectorLocalities.forEach((sectorLocality, locIndex) => {
       // Sector Locality Admin
       testUsers.push({
-        mobileNumber: `+249433333${String(index * 10 + locIndex + 1).padStart(3, '0')}`,
+        mobileNumber: `+249313333${String(index * 10 + locIndex + 1).padStart(3, '0')}`,
         email: `sector.locality.${index}.${locIndex}@test.com`,
         firstName: `مدير`,
         lastName: sectorLocality.name,
@@ -378,7 +378,7 @@ async function createTestUsers() {
 
       // Sector Locality Regular User
       testUsers.push({
-        mobileNumber: `+249444444${String(index * 10 + locIndex + 1).padStart(3, '0')}`,
+        mobileNumber: `+249314444${String(index * 10 + locIndex + 1).padStart(3, '0')}`,
         email: `sector.locality.user.${index}.${locIndex}@test.com`,
         firstName: `عضو`,
         lastName: sectorLocality.name,
@@ -393,7 +393,7 @@ async function createTestUsers() {
       sectorLocality.sectorAdminUnits.forEach((sectorAdminUnit, auIndex) => {
         // Sector Admin Unit Admin
         testUsers.push({
-          mobileNumber: `+249455555${String(index * 100 + locIndex * 10 + auIndex + 1).padStart(3, '0')}`,
+          mobileNumber: `+249315555${String(index * 100 + locIndex * 10 + auIndex + 1).padStart(3, '0')}`,
           email: `sector.adminunit.${index}.${locIndex}.${auIndex}@test.com`,
           firstName: `مدير`,
           lastName: sectorAdminUnit.name,
@@ -407,7 +407,7 @@ async function createTestUsers() {
 
         // Sector Admin Unit Regular User
         testUsers.push({
-          mobileNumber: `+249466666${String(index * 100 + locIndex * 10 + auIndex + 1).padStart(3, '0')}`,
+          mobileNumber: `+249316666${String(index * 100 + locIndex * 10 + auIndex + 1).padStart(3, '0')}`,
           email: `sector.adminunit.user.${index}.${locIndex}.${auIndex}@test.com`,
           firstName: `عضو`,
           lastName: sectorAdminUnit.name,
@@ -423,7 +423,7 @@ async function createTestUsers() {
         sectorAdminUnit.sectorDistricts.forEach((sectorDistrict, distIndex) => {
           // Sector District Admin
           testUsers.push({
-            mobileNumber: `+249477777${String(index * 1000 + locIndex * 100 + auIndex * 10 + distIndex + 1).padStart(3, '0')}`,
+            mobileNumber: `+249317777${String(index * 1000 + locIndex * 100 + auIndex * 10 + distIndex + 1).padStart(3, '0')}`,
             email: `sector.district.${index}.${locIndex}.${auIndex}.${distIndex}@test.com`,
             firstName: `مدير`,
             lastName: sectorDistrict.name,
@@ -438,7 +438,7 @@ async function createTestUsers() {
 
           // Sector District Regular User
           testUsers.push({
-            mobileNumber: `+249488888${String(index * 1000 + locIndex * 100 + auIndex * 10 + distIndex + 1).padStart(3, '0')}`,
+            mobileNumber: `+249318888${String(index * 1000 + locIndex * 100 + auIndex * 10 + distIndex + 1).padStart(3, '0')}`,
             email: `sector.district.user.${index}.${locIndex}.${auIndex}.${distIndex}@test.com`,
             firstName: `عضو`,
             lastName: sectorDistrict.name,

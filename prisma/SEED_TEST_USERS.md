@@ -95,10 +95,10 @@ All test users have the same password for easy testing:
 
 ## Mobile Numbers Format
 
-Mobile numbers follow a pattern:
-- ORIGINAL hierarchy: `+249111111xxx` to `+249999999xxx`
-- EXPATRIATE hierarchy: `+249211111xxx` to `+249333333xxx`
-- SECTOR hierarchy: `+249411111xxx` to `+249488888xxx`
+Mobile numbers follow a pattern (all unique):
+- **ORIGINAL hierarchy**: `+249111111xxx` to `+249999999xxx`
+- **EXPATRIATE hierarchy**: `+249211111xxx` to `+249213333xxx`
+- **SECTOR hierarchy**: `+249311111xxx` to `+249318888xxx`
 
 ## Important Notes
 
