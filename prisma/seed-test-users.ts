@@ -15,7 +15,10 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const prisma = new PrismaClient();
+// Prisma 7.x requires explicit datasource URL configuration
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DATABASE_URL,
+});
 
 /**
  * Comprehensive test users and admins seed script
