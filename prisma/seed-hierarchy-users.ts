@@ -1,5 +1,19 @@
 import { PrismaClient, AdminLevel } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import dotenv from 'dotenv';
+import { resolve } from 'path';
+
+// Load environment variables - ts-node needs explicit dotenv loading
+const envPath = resolve(process.cwd(), '.env');
+dotenv.config({ path: envPath });
+
+// Verify DATABASE_URL is loaded
+if (!process.env.DATABASE_URL) {
+  console.error('❌ Error: DATABASE_URL is not set in environment variables.');
+  console.error(`   Looking for .env file at: ${envPath}`);
+  console.error('   Please ensure .env file exists in the project root with DATABASE_URL set.');
+  process.exit(1);
+}
 
 const prisma = new PrismaClient();
 
