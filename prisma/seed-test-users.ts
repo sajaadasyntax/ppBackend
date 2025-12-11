@@ -18,7 +18,6 @@ const prisma = new PrismaClient();
  */
 
 const DEFAULT_PASSWORD = 'Test@123';
-const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
 interface TestUser {
   mobileNumber: string;
@@ -132,6 +131,9 @@ async function getOrCreateHierarchyEntities() {
 
 async function createTestUsers() {
   console.log('\n👥 Creating test users and admins...');
+
+  // Generate password hash for all users
+  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
   const hierarchy = await getOrCreateHierarchyEntities();
   const testUsers: TestUser[] = [];
