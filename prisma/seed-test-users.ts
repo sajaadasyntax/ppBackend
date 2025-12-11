@@ -1,8 +1,38 @@
 import { PrismaClient, AdminLevel, ActiveHierarchy } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import dotenv from 'dotenv';
+import { resolve } from 'path';
 
-// Prisma automatically loads .env file from project root
-// No need to explicitly load dotenv (same as seed.ts)
+// Explicitly load .env file - ts-node may not find it automatically
+// Try multiple possible paths
+const envPaths = [
+  resolve(process.cwd(), '.env'),
+  resolve(__dirname, '..', '.env'),
+  resolve(process.cwd(), '..', '.env')
+];
+
+let envLoaded = false;
+for (const envPath of envPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
+    envLoaded = true;
+    console.log(`✅ Loaded .env from: ${envPath}`);
+    break;
+  }
+}
+
+if (!envLoaded) {
+  console.warn('⚠️  Warning: Could not load .env file, trying default location...');
+  dotenv.config(); // Try default location
+}
+
+// Verify DATABASE_URL is available
+if (!process.env.DATABASE_URL) {
+  console.error('❌ Error: DATABASE_URL is not set in environment variables.');
+  console.error('   Please ensure .env file exists in the project root with DATABASE_URL set.');
+  process.exit(1);
+}
+
 const prisma = new PrismaClient();
 
 /**
