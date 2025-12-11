@@ -1,10 +1,8 @@
 import { PrismaClient, AdminLevel, ActiveHierarchy } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import * as dotenv from 'dotenv';
 
-// Load environment variables
-dotenv.config();
-
+// Prisma automatically loads .env file from project root
+// No need to explicitly load dotenv (same as seed.ts)
 const prisma = new PrismaClient();
 
 /**
