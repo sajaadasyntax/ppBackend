@@ -685,6 +685,59 @@ export const getMemberSurveys = async (userId: string, adminUser: any = null): P
   }
 };
 
+// Get single survey by ID
+export const getSurveyById = async (surveyId: string, userId: string): Promise<any> => {
+  try {
+    const survey = await prisma.survey.findUnique({
+      where: { id: surveyId },
+      include: {
+        responses: {
+          where: { userId },
+          select: { id: true, answers: true }
+        }
+      }
+    });
+
+    if (!survey) {
+      return null;
+    }
+
+    const isCompleted = survey.responses.length > 0;
+    const questions = JSON.parse(survey.questions);
+    const questionsCount = Array.isArray(questions) ? questions.length : 0;
+    
+    return {
+      id: survey.id,
+      title: survey.title,
+      description: survey.description,
+      dueDate: survey.dueDate.toISOString().split('T')[0],
+      questions: questions,
+      questionsCount: questionsCount,
+      isCompleted,
+      userResponse: survey.responses.length > 0 ? JSON.parse(survey.responses[0].answers) : null,
+      participants: Math.floor(Math.random() * 100) + 20, // Mock data for now
+      type: survey.audience || 'public',
+      audience: survey.audience || 'public',
+      // Add all hierarchy information
+      targetNationalLevelId: survey.targetNationalLevelId,
+      targetRegionId: survey.targetRegionId,
+      targetLocalityId: survey.targetLocalityId,
+      targetAdminUnitId: survey.targetAdminUnitId,
+      targetDistrictId: survey.targetDistrictId,
+      targetExpatriateRegionId: survey.targetExpatriateRegionId,
+      targetSectorNationalLevelId: survey.targetSectorNationalLevelId,
+      targetSectorRegionId: survey.targetSectorRegionId,
+      targetSectorLocalityId: survey.targetSectorLocalityId,
+      targetSectorAdminUnitId: survey.targetSectorAdminUnitId,
+      targetSectorDistrictId: survey.targetSectorDistrictId,
+      hierarchy: determineHierarchyFromTargets(survey)
+    };
+  } catch (error: any) {
+    console.error('Error in getSurveyById service:', error);
+    throw error;
+  }
+};
+
 export const submitSurveyResponse = async (surveyId: string, userId: string, answers: any): Promise<any> => {
   try {
     // Check if the user has already responded to this survey
@@ -1451,6 +1504,54 @@ export const createSurvey = async (userId: string, surveyData: any): Promise<any
   }
 };
 
+// Update report status
+export const updateReportStatus = async (reportId: string, status: string): Promise<any> => {
+  try {
+    const validStatuses = ['pending', 'resolved', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      throw new Error('Invalid status. Must be: pending, resolved, or rejected');
+    }
+
+    const report = await prisma.report.update({
+      where: { id: reportId },
+      data: { status }
+    });
+
+    return {
+      id: report.id,
+      title: report.title,
+      status: report.status,
+      updatedAt: report.updatedAt.toISOString()
+    };
+  } catch (error: any) {
+    console.error('Error in updateReportStatus service:', error);
+    throw error;
+  }
+};
+
+// Update archive document
+export const updateArchiveDocument = async (id: string, documentData: any): Promise<any> => {
+  try {
+    const { title, category } = documentData;
+    
+    const document = await prisma.archiveDocument.update({
+      where: { id },
+      data: {
+        ...(title && { title }),
+        ...(category && { category })
+      }
+    });
+
+    return {
+      ...document,
+      date: document.date.toISOString().split('T')[0]
+    };
+  } catch (error: any) {
+    console.error('Error in updateArchiveDocument service:', error);
+    throw error;
+  }
+};
+
 export default {
   getAllContent,
   getContentById,
@@ -1464,8 +1565,10 @@ export default {
   deleteBulletin,
   getArchiveDocuments,
   createArchiveDocument,
+  updateArchiveDocument,
   deleteArchiveDocument,
   getSurveys,
+  getSurveyById,
   getPublicSurveys,
   getMemberSurveys,
   createSurvey,
@@ -1480,6 +1583,7 @@ export default {
   getUserReports,
   getAllReports,
   getReportById,
+  updateReportStatus,
   // Reserved for future use
   _getLocalityIdsInRegion,
   _getAdminUnitIdsInRegion,

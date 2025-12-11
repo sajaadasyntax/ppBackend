@@ -546,6 +546,31 @@ export const getMemberSurveys = async (req: AuthenticatedRequest, res: Response,
   }
 };
 
+// Get single survey by ID
+export const getSurveyById = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { surveyId } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    
+    const survey = await contentService.getSurveyById(surveyId, userId);
+    
+    if (!survey) {
+      res.status(404).json({ error: 'Survey not found' });
+      return;
+    }
+    
+    res.json(survey);
+  } catch (error: any) {
+    console.error('Error in getSurveyById controller:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const submitSurveyResponse = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { surveyId } = req.params;
@@ -554,9 +579,11 @@ export const submitSurveyResponse = async (req: AuthenticatedRequest, res: Respo
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    const { answers } = req.body;
+    // Accept both 'answers' and 'responses' for backward compatibility
+    const { answers, responses } = req.body;
+    const surveyAnswers = answers || responses;
     
-    const response = await contentService.submitSurveyResponse(surveyId, userId, answers);
+    const response = await contentService.submitSurveyResponse(surveyId, userId, surveyAnswers);
     res.status(201).json(response);
   } catch (error: any) {
     console.error('Error in submitSurveyResponse controller:', error);
@@ -950,6 +977,59 @@ export const getReportById = async (req: AuthenticatedRequest, res: Response, _n
     }
   } catch (error: any) {
     console.error('Error in getReportById controller:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Update report status
+export const updateReportStatus = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const reportId = req.params.id;
+    const { status } = req.body;
+    
+    if (!status) {
+      res.status(400).json({ error: 'Status is required' });
+      return;
+    }
+    
+    try {
+      const report = await contentService.updateReportStatus(reportId, status);
+      res.json(report);
+    } catch (error: any) {
+      if (error.message === 'Report not found') {
+        res.status(404).json({ error: 'Report not found' });
+        return;
+      }
+      if (error.message.includes('Invalid status')) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+  } catch (error: any) {
+    console.error('Error in updateReportStatus controller:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Update archive document
+export const updateArchiveDocument = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { title, category } = req.body;
+    
+    try {
+      const document = await contentService.updateArchiveDocument(id, { title, category });
+      res.json(document);
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+      throw error;
+    }
+  } catch (error: any) {
+    console.error('Error in updateArchiveDocument controller:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

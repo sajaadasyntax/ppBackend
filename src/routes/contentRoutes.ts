@@ -40,6 +40,7 @@ router.delete('/bulletins/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGI
 // Archive routes
 router.get('/archive', contentController.getArchiveDocuments);
 router.post('/archive/upload', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.uploadArchiveDocument);
+router.put('/archive/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.updateArchiveDocument);
 router.delete('/archive/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.deleteArchiveDocument);
 
 // Surveys routes
@@ -49,7 +50,8 @@ router.get('/surveys/public/hierarchical', contentController.getPublicSurveys); 
 router.get('/surveys/member', contentController.getMemberSurveys);
 router.get('/surveys/member/hierarchical', contentController.getMemberSurveys); // Hierarchical endpoint for mobile
 router.post('/surveys', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.createSurvey);
-router.post('/surveys/:id/respond', contentController.submitSurveyResponse);
+router.get('/surveys/:surveyId', contentController.getSurveyById); // Get single survey by ID
+router.post('/surveys/:surveyId/respond', contentController.submitSurveyResponse);
 
 // Voting routes
 router.get('/voting', contentController.getVotingItems);
@@ -67,6 +69,7 @@ router.post('/reports', contentController.submitReport);
 router.get('/reports/user', contentController.getUserReports);
 router.get('/reports', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.getAllReports);
 router.get('/reports/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.getReportById);
+router.patch('/reports/:id/status', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.updateReportStatus);
 router.get('/reports/:id/attachments/:filename', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), contentController.getReportAttachment);
 
 // Hierarchy routes
