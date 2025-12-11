@@ -1,4 +1,6 @@
 import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
@@ -15,10 +17,10 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Prisma 7.x requires explicit datasource URL configuration
-const prisma = new PrismaClient({
-  datasourceUrl: process.env.DATABASE_URL,
-});
+// Prisma 7.x uses the adapter pattern for database connections
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 /**
  * Comprehensive seed file for PP Backend
