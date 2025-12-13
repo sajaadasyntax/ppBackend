@@ -23,6 +23,9 @@ router.patch('/regions/:id/status', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIA
 router.delete('/regions/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT']), hierarchyController.deleteRegion);
 
 // Locality routes
+// Query-param style route for mobile compatibility (GET /localities?regionId=xxx)
+router.get('/localities', hierarchyController.getLocalities);
+// Nested route style (GET /regions/:regionId/localities)
 router.get('/regions/:regionId/localities', hierarchyController.getLocalitiesByRegion);
 router.post('/regions/:regionId/localities', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.createLocality);
 router.get('/localities/:id', hierarchyController.getLocalityById);
@@ -32,6 +35,9 @@ router.patch('/localities/:id/status', authorizeRoles(['ADMIN', 'GENERAL_SECRETA
 router.delete('/localities/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION']), hierarchyController.deleteLocality);
 
 // Administrative Unit routes
+// Query-param style route for mobile compatibility (GET /admin-units?localityId=xxx)
+router.get('/admin-units', hierarchyController.getAdminUnits);
+// Nested route style (GET /localities/:localityId/admin-units)
 router.get('/localities/:localityId/admin-units', hierarchyController.getAdminUnitsByLocality);
 router.post('/localities/:localityId/admin-units', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.createAdminUnit);
 router.get('/admin-units/:id', hierarchyController.getAdminUnitById);
@@ -41,6 +47,9 @@ router.patch('/admin-units/:id/status', authorizeRoles(['ADMIN', 'GENERAL_SECRET
 router.delete('/admin-units/:id', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY']), hierarchyController.deleteAdminUnit);
 
 // District routes
+// Query-param style route for mobile compatibility (GET /districts?adminUnitId=xxx)
+router.get('/districts', hierarchyController.getDistricts);
+// Nested route style (GET /admin-units/:adminUnitId/districts)
 router.get('/admin-units/:adminUnitId/districts', hierarchyController.getDistrictsByAdminUnit);
 router.post('/admin-units/:adminUnitId/districts', authorizeRoles(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), hierarchyController.createDistrict);
 router.get('/districts/:id', hierarchyController.getDistrictById);

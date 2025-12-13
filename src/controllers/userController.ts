@@ -672,6 +672,8 @@ export const createUserWithHierarchy = async (req: AuthenticatedRequest, res: Re
 };
 
 // Update user hierarchy assignment
+// IMPORTANT: This function auto-derives parent IDs from the most specific level
+// to ensure hierarchy consistency. Only the most specific ID needs to be provided.
 export const updateUserHierarchy = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
@@ -683,44 +685,148 @@ export const updateUserHierarchy = async (req: AuthenticatedRequest, res: Respon
       districtId
     } = req.body;
 
-    // Prepare update data
-    const updateData = {
+    // Prepare update data - start with clearing all hierarchy fields
+    const updateData: {
+      nationalLevelId: string | null;
+      regionId: string | null;
+      localityId: string | null;
+      adminUnitId: string | null;
+      districtId: string | null;
+    } = {
+      nationalLevelId: null,
       regionId: null,
       localityId: null,
       adminUnitId: null,
       districtId: null
     };
 
-    // Add hierarchy assignment based on selected level
+    // Auto-derive parent IDs from the most specific level provided
+    // This ensures hierarchy consistency by looking up the actual relationships in DB
     if (hierarchyLevel && hierarchyLevel !== 'none') {
       switch (hierarchyLevel) {
-        case 'region':
-          updateData.regionId = regionId;
-          break;
-        case 'locality':
-          updateData.regionId = regionId;
-          updateData.localityId = localityId;
-          break;
-        case 'adminUnit':
-          updateData.regionId = regionId;
-          updateData.localityId = localityId;
-          updateData.adminUnitId = adminUnitId;
-          break;
-        case 'district':
-          updateData.regionId = regionId;
-          updateData.localityId = localityId;
-          updateData.adminUnitId = adminUnitId;
+        case 'district': {
+          if (!districtId) {
+            res.status(400).json({ error: 'districtId is required for district level assignment' });
+            return;
+          }
+          // Look up district and derive all parent IDs
+          const district = await prisma.district.findUnique({
+            where: { id: districtId },
+            include: {
+              adminUnit: {
+                include: {
+                  locality: {
+                    include: {
+                      region: {
+                        select: { id: true, nationalLevelId: true }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          });
+          if (!district) {
+            res.status(404).json({ error: 'District not found' });
+            return;
+          }
+          // Auto-derive all parent IDs from the district's actual relationships
           updateData.districtId = districtId;
+          updateData.adminUnitId = district.adminUnitId;
+          updateData.localityId = district.adminUnit.localityId;
+          updateData.regionId = district.adminUnit.locality.regionId;
+          updateData.nationalLevelId = district.adminUnit.locality.region.nationalLevelId;
           break;
+        }
+        
+        case 'adminUnit': {
+          if (!adminUnitId) {
+            res.status(400).json({ error: 'adminUnitId is required for admin unit level assignment' });
+            return;
+          }
+          // Look up admin unit and derive parent IDs
+          const adminUnit = await prisma.adminUnit.findUnique({
+            where: { id: adminUnitId },
+            include: {
+              locality: {
+                include: {
+                  region: {
+                    select: { id: true, nationalLevelId: true }
+                  }
+                }
+              }
+            }
+          });
+          if (!adminUnit) {
+            res.status(404).json({ error: 'Admin unit not found' });
+            return;
+          }
+          // Auto-derive parent IDs
+          updateData.adminUnitId = adminUnitId;
+          updateData.localityId = adminUnit.localityId;
+          updateData.regionId = adminUnit.locality.regionId;
+          updateData.nationalLevelId = adminUnit.locality.region.nationalLevelId;
+          break;
+        }
+        
+        case 'locality': {
+          if (!localityId) {
+            res.status(400).json({ error: 'localityId is required for locality level assignment' });
+            return;
+          }
+          // Look up locality and derive parent IDs
+          const locality = await prisma.locality.findUnique({
+            where: { id: localityId },
+            include: {
+              region: {
+                select: { id: true, nationalLevelId: true }
+              }
+            }
+          });
+          if (!locality) {
+            res.status(404).json({ error: 'Locality not found' });
+            return;
+          }
+          // Auto-derive parent IDs
+          updateData.localityId = localityId;
+          updateData.regionId = locality.regionId;
+          updateData.nationalLevelId = locality.region.nationalLevelId;
+          break;
+        }
+        
+        case 'region': {
+          if (!regionId) {
+            res.status(400).json({ error: 'regionId is required for region level assignment' });
+            return;
+          }
+          // Look up region to get national level
+          const region = await prisma.region.findUnique({
+            where: { id: regionId },
+            select: { id: true, nationalLevelId: true }
+          });
+          if (!region) {
+            res.status(404).json({ error: 'Region not found' });
+            return;
+          }
+          updateData.regionId = regionId;
+          updateData.nationalLevelId = region.nationalLevelId;
+          break;
+        }
+        
+        default:
+          res.status(400).json({ error: 'Invalid hierarchy level. Must be one of: region, locality, adminUnit, district' });
+          return;
       }
     }
+    // If hierarchyLevel is 'none' or not provided, all IDs remain null (user removed from hierarchy)
 
-    // Update user
+    // Update user with validated hierarchy data
     const updatedUser = await prisma.user.update({
       where: { id },
       data: updateData,
       include: {
         profile: true,
+        nationalLevel: true,
         region: true,
         locality: {
           include: { region: true }
@@ -919,15 +1025,128 @@ export const updateActiveHierarchy = async (req: AuthenticatedRequest, res: Resp
 };
 
 /**
+ * Helper to verify if a user has hierarchical access to a given level and entity
+ */
+async function verifyHierarchicalAccess(user: any, level: string, hierarchyId?: string): Promise<boolean> {
+  if (!user) return false;
+  
+  // Super admins have access to everything
+  if (['ADMIN', 'GENERAL_SECRETARIAT'].includes(user.adminLevel)) {
+    return true;
+  }
+  
+  // If no hierarchyId provided, allow (will be filtered later)
+  if (!hierarchyId) return true;
+  
+  switch (user.adminLevel) {
+    case 'NATIONAL_LEVEL': {
+      // National level admins can access everything in their national level
+      if (level === 'national' || level === 'nationalLevel') {
+        return user.nationalLevelId === hierarchyId;
+      }
+      if (level === 'region') {
+        const region = await prisma.region.findUnique({ where: { id: hierarchyId } });
+        return region?.nationalLevelId === user.nationalLevelId;
+      }
+      if (level === 'locality') {
+        const locality = await prisma.locality.findUnique({ 
+          where: { id: hierarchyId }, 
+          include: { region: true } 
+        });
+        return locality?.region?.nationalLevelId === user.nationalLevelId;
+      }
+      if (level === 'adminUnit') {
+        const adminUnit = await prisma.adminUnit.findUnique({ 
+          where: { id: hierarchyId }, 
+          include: { locality: { include: { region: true } } } 
+        });
+        return adminUnit?.locality?.region?.nationalLevelId === user.nationalLevelId;
+      }
+      if (level === 'district') {
+        const district = await prisma.district.findUnique({ 
+          where: { id: hierarchyId }, 
+          include: { adminUnit: { include: { locality: { include: { region: true } } } } } 
+        });
+        return district?.adminUnit?.locality?.region?.nationalLevelId === user.nationalLevelId;
+      }
+      return false;
+    }
+    
+    case 'REGION': {
+      if (level === 'region') return user.regionId === hierarchyId;
+      if (level === 'locality') {
+        const locality = await prisma.locality.findUnique({ where: { id: hierarchyId } });
+        return locality?.regionId === user.regionId;
+      }
+      if (level === 'adminUnit') {
+        const adminUnit = await prisma.adminUnit.findUnique({ 
+          where: { id: hierarchyId }, 
+          include: { locality: true } 
+        });
+        return adminUnit?.locality?.regionId === user.regionId;
+      }
+      if (level === 'district') {
+        const district = await prisma.district.findUnique({ 
+          where: { id: hierarchyId }, 
+          include: { adminUnit: { include: { locality: true } } } 
+        });
+        return district?.adminUnit?.locality?.regionId === user.regionId;
+      }
+      return false;
+    }
+    
+    case 'LOCALITY': {
+      if (level === 'locality') return user.localityId === hierarchyId;
+      if (level === 'adminUnit') {
+        const adminUnit = await prisma.adminUnit.findUnique({ where: { id: hierarchyId } });
+        return adminUnit?.localityId === user.localityId;
+      }
+      if (level === 'district') {
+        const district = await prisma.district.findUnique({ 
+          where: { id: hierarchyId }, 
+          include: { adminUnit: true } 
+        });
+        return district?.adminUnit?.localityId === user.localityId;
+      }
+      return false;
+    }
+    
+    case 'ADMIN_UNIT': {
+      if (level === 'adminUnit') return user.adminUnitId === hierarchyId;
+      if (level === 'district') {
+        const district = await prisma.district.findUnique({ where: { id: hierarchyId } });
+        return district?.adminUnitId === user.adminUnitId;
+      }
+      return false;
+    }
+    
+    default:
+      return false;
+  }
+}
+
+/**
  * Get available users who can be assigned as admins for hierarchy levels
  */
 export const getAvailableAdmins = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { level, hierarchyId } = req.query;
+    const currentUser = req.user;
     
     if (!level) {
       res.status(400).json({ error: 'Level parameter is required' });
       return;
+    }
+
+    // Hierarchical scope validation for non-super admins
+    // Users can only access admins in their hierarchy scope
+    if (currentUser?.adminLevel && !['ADMIN', 'GENERAL_SECRETARIAT'].includes(currentUser.adminLevel)) {
+      // For hierarchical admins, verify they have access to the requested hierarchy
+      const canAccess = await verifyHierarchicalAccess(currentUser, level as string, hierarchyId as string);
+      if (!canAccess) {
+        res.status(403).json({ error: 'Forbidden - You do not have access to this hierarchy level' });
+        return;
+      }
     }
 
     // IMPORTANT: Users only exist at district level

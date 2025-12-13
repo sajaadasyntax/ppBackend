@@ -4,6 +4,11 @@ import { authenticate } from '../middlewares/auth';
 
 const router: Router = express.Router();
 
+// Test route to verify routing is working
+router.get('/test', (_req, res) => {
+  res.json({ message: 'Auth routes are working', path: '/api/auth/test' });
+});
+
 // Auth routes
 router.post('/login', authController.login);
 router.post('/register', authController.register);

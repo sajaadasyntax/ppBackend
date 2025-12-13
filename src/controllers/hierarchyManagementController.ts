@@ -1,6 +1,13 @@
 import { Response, NextFunction } from 'express';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../types';
+import { 
+  prepareHierarchyData, 
+  normalizeCode,
+  isUniqueConstraintError, 
+  isNotFoundError,
+  getConstraintErrorMessage 
+} from '../utils/hierarchyValidation';
 
 /**
  * Hierarchy Management Controller
@@ -279,20 +286,11 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
   try {
     const { name, code, description, nationalLevelId } = req.body;
     
-    if (!name) {
-      res.status(400).json({ error: 'Region name is required' });
+    // Use centralized validation
+    const preparedData = prepareHierarchyData({ name, code, description });
+    if (!preparedData.isValid) {
+      res.status(400).json({ error: preparedData.error });
       return;
-    }
-    
-    // Check if code already exists
-    if (code) {
-      const existing = await prisma.region.findUnique({
-        where: { code }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'Region code already exists' });
-        return;
-      }
     }
     
     // Get or create default national level if not provided
@@ -304,9 +302,9 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
     
     const region = await prisma.region.create({
       data: {
-        name,
-        code,
-        description,
+        name: preparedData.name,
+        code: preparedData.code,
+        description: preparedData.description,
         active: true,
         nationalLevelId: targetNationalLevelId
       }
@@ -315,6 +313,10 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
     res.status(201).json(region);
   } catch (error: any) {
     console.error('Error creating region:', error);
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'region') });
+      return;
+    }
     res.status(500).json({ error: 'Failed to create region' });
   }
 };
@@ -324,11 +326,15 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
   try {
     const { name, code, description, regionId } = req.body;
     
-    console.log('Creating locality with data:', { name, code, description, regionId });
+    // Use centralized validation
+    const preparedData = prepareHierarchyData({ name, code, description });
+    if (!preparedData.isValid) {
+      res.status(400).json({ error: preparedData.error });
+      return;
+    }
     
-    if (!name || !regionId) {
-      console.log('Validation failed: missing required fields', { name: !!name, regionId: !!regionId });
-      res.status(400).json({ error: 'Locality name and region are required' });
+    if (!regionId) {
+      res.status(400).json({ error: 'Region ID is required' });
       return;
     }
     
@@ -341,22 +347,11 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
     
-    // Check if code already exists
-    if (code) {
-      const existing = await prisma.locality.findUnique({
-        where: { code }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'Locality code already exists' });
-        return;
-      }
-    }
-    
     const locality = await prisma.locality.create({
       data: {
-        name,
-        code,
-        description,
+        name: preparedData.name,
+        code: preparedData.code,
+        description: preparedData.description,
         regionId,
         active: true
       },
@@ -368,6 +363,10 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
     res.status(201).json(locality);
   } catch (error: any) {
     console.error('Error creating locality:', error);
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'locality') });
+      return;
+    }
     res.status(500).json({ error: 'Failed to create locality' });
   }
 };
@@ -377,11 +376,15 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
   try {
     const { name, code, description, localityId } = req.body;
     
-    console.log('Creating admin unit with data:', { name, code, description, localityId });
+    // Use centralized validation
+    const preparedData = prepareHierarchyData({ name, code, description });
+    if (!preparedData.isValid) {
+      res.status(400).json({ error: preparedData.error });
+      return;
+    }
     
-    if (!name || !localityId) {
-      console.log('Validation failed: missing required fields', { name: !!name, localityId: !!localityId });
-      res.status(400).json({ error: 'Admin unit name and locality are required' });
+    if (!localityId) {
+      res.status(400).json({ error: 'Locality ID is required' });
       return;
     }
     
@@ -394,22 +397,11 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
       return;
     }
     
-    // Check if code already exists
-    if (code) {
-      const existing = await prisma.adminUnit.findUnique({
-        where: { code }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'Admin unit code already exists' });
-        return;
-      }
-    }
-    
     const adminUnit = await prisma.adminUnit.create({
       data: {
-        name,
-        code,
-        description,
+        name: preparedData.name,
+        code: preparedData.code,
+        description: preparedData.description,
         localityId,
         active: true
       },
@@ -423,6 +415,10 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
     res.status(201).json(adminUnit);
   } catch (error: any) {
     console.error('Error creating admin unit:', error);
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'admin unit') });
+      return;
+    }
     res.status(500).json({ error: 'Failed to create admin unit' });
   }
 };
@@ -432,11 +428,15 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
   try {
     const { name, code, description, adminUnitId } = req.body;
     
-    console.log('Creating district with data:', { name, code, description, adminUnitId });
+    // Use centralized validation
+    const preparedData = prepareHierarchyData({ name, code, description });
+    if (!preparedData.isValid) {
+      res.status(400).json({ error: preparedData.error });
+      return;
+    }
     
-    if (!name || !adminUnitId) {
-      console.log('Validation failed: missing required fields', { name: !!name, adminUnitId: !!adminUnitId });
-      res.status(400).json({ error: 'District name and admin unit are required' });
+    if (!adminUnitId) {
+      res.status(400).json({ error: 'Admin unit ID is required' });
       return;
     }
     
@@ -449,22 +449,11 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
     
-    // Check if code already exists
-    if (code) {
-      const existing = await prisma.district.findUnique({
-        where: { code }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'District code already exists' });
-        return;
-      }
-    }
-    
     const district = await prisma.district.create({
       data: {
-        name,
-        code,
-        description,
+        name: preparedData.name,
+        code: preparedData.code,
+        description: preparedData.description,
         adminUnitId,
         active: true
       },
@@ -482,6 +471,10 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
     res.status(201).json(district);
   } catch (error: any) {
     console.error('Error creating district:', error);
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'district') });
+      return;
+    }
     res.status(500).json({ error: 'Failed to create district' });
   }
 };
@@ -490,28 +483,44 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
 export const updateRegion = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, active } = req.body;
+    const { name, code, description, active, updatedAt: clientUpdatedAt } = req.body;
     
-    // Check if code already exists (excluding current region)
-    if (code) {
-      const existing = await prisma.region.findFirst({
-        where: { 
-          code,
-          id: { not: id }
-        }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'Region code already exists' });
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
         return;
       }
+      
+      const currentRegion = await prisma.region.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentRegion) {
+        const timeDiff = Math.abs(currentRegion.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This region has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
+    
+    // Normalize code before saving
+    const normalizedCode = normalizeCode(code);
     
     const region = await prisma.region.update({
       where: { id },
       data: {
-        name,
-        code,
-        description,
+        name: name?.trim(),
+        code: normalizedCode,
+        description: description?.trim() || undefined,
         active
       }
     });
@@ -519,8 +528,12 @@ export const updateRegion = async (req: AuthenticatedRequest, res: Response, _ne
     res.json(region);
   } catch (error: any) {
     console.error('Error updating region:', error);
-    if (error.code === 'P2025') {
+    if (isNotFoundError(error)) {
       res.status(404).json({ error: 'Region not found' });
+      return;
+    }
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'region') });
       return;
     }
     res.status(500).json({ error: 'Failed to update region' });
@@ -531,28 +544,44 @@ export const updateRegion = async (req: AuthenticatedRequest, res: Response, _ne
 export const updateLocality = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, active, regionId } = req.body;
+    const { name, code, description, active, regionId, updatedAt: clientUpdatedAt } = req.body;
     
-    // Check if code already exists (excluding current locality)
-    if (code) {
-      const existing = await prisma.locality.findFirst({
-        where: { 
-          code,
-          id: { not: id }
-        }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'Locality code already exists' });
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
         return;
       }
+      
+      const currentLocality = await prisma.locality.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentLocality) {
+        const timeDiff = Math.abs(currentLocality.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This locality has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
+    
+    // Normalize code before saving
+    const normalizedCode = normalizeCode(code);
     
     const locality = await prisma.locality.update({
       where: { id },
       data: {
-        name,
-        code,
-        description,
+        name: name?.trim(),
+        code: normalizedCode,
+        description: description?.trim() || undefined,
         active,
         regionId
       },
@@ -564,8 +593,12 @@ export const updateLocality = async (req: AuthenticatedRequest, res: Response, _
     res.json(locality);
   } catch (error: any) {
     console.error('Error updating locality:', error);
-    if (error.code === 'P2025') {
+    if (isNotFoundError(error)) {
       res.status(404).json({ error: 'Locality not found' });
+      return;
+    }
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'locality') });
       return;
     }
     res.status(500).json({ error: 'Failed to update locality' });
@@ -576,28 +609,44 @@ export const updateLocality = async (req: AuthenticatedRequest, res: Response, _
 export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, active, localityId } = req.body;
+    const { name, code, description, active, localityId, updatedAt: clientUpdatedAt } = req.body;
     
-    // Check if code already exists (excluding current admin unit)
-    if (code) {
-      const existing = await prisma.adminUnit.findFirst({
-        where: { 
-          code,
-          id: { not: id }
-        }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'Admin unit code already exists' });
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
         return;
       }
+      
+      const currentAdminUnit = await prisma.adminUnit.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentAdminUnit) {
+        const timeDiff = Math.abs(currentAdminUnit.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This admin unit has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
+    
+    // Normalize code before saving
+    const normalizedCode = normalizeCode(code);
     
     const adminUnit = await prisma.adminUnit.update({
       where: { id },
       data: {
-        name,
-        code,
-        description,
+        name: name?.trim(),
+        code: normalizedCode,
+        description: description?.trim() || undefined,
         active,
         localityId
       },
@@ -611,8 +660,12 @@ export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, 
     res.json(adminUnit);
   } catch (error: any) {
     console.error('Error updating admin unit:', error);
-    if (error.code === 'P2025') {
+    if (isNotFoundError(error)) {
       res.status(404).json({ error: 'Admin unit not found' });
+      return;
+    }
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'admin unit') });
       return;
     }
     res.status(500).json({ error: 'Failed to update admin unit' });
@@ -623,28 +676,44 @@ export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, 
 export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, active, adminUnitId } = req.body;
+    const { name, code, description, active, adminUnitId, updatedAt: clientUpdatedAt } = req.body;
     
-    // Check if code already exists (excluding current district)
-    if (code) {
-      const existing = await prisma.district.findFirst({
-        where: { 
-          code,
-          id: { not: id }
-        }
-      });
-      if (existing) {
-        res.status(400).json({ error: 'District code already exists' });
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
         return;
       }
+      
+      const currentDistrict = await prisma.district.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentDistrict) {
+        const timeDiff = Math.abs(currentDistrict.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This district has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
+    
+    // Normalize code before saving
+    const normalizedCode = normalizeCode(code);
     
     const district = await prisma.district.update({
       where: { id },
       data: {
-        name,
-        code,
-        description,
+        name: name?.trim(),
+        code: normalizedCode,
+        description: description?.trim() || undefined,
         active,
         adminUnitId
       },
@@ -662,8 +731,12 @@ export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _
     res.json(district);
   } catch (error: any) {
     console.error('Error updating district:', error);
-    if (error.code === 'P2025') {
+    if (isNotFoundError(error)) {
       res.status(404).json({ error: 'District not found' });
+      return;
+    }
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: getConstraintErrorMessage(error, 'district') });
       return;
     }
     res.status(500).json({ error: 'Failed to update district' });
@@ -675,26 +748,31 @@ export const deleteRegion = async (req: AuthenticatedRequest, res: Response, _ne
   try {
     const { id } = req.params;
     
-    // Check if region has localities
-    const localitiesCount = await prisma.locality.count({
-      where: { regionId: id, active: true }
-    });
-    
-    if (localitiesCount > 0) {
-      res.status(400).json({ 
-        error: 'Cannot delete region with active localities. Please deactivate all localities first.' 
+    // Use transaction to atomically check for children and update
+    // This prevents race conditions where children could be added between check and update
+    const region = await prisma.$transaction(async (tx) => {
+      // Check if region has localities within the transaction
+      const localitiesCount = await tx.locality.count({
+        where: { regionId: id, active: true }
       });
-      return;
-    }
-    
-    const region = await prisma.region.update({
-      where: { id },
-      data: { active: false }
+      
+      if (localitiesCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot delete region with active localities. Please deactivate all localities first.');
+      }
+      
+      return tx.region.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
     res.json({ message: 'Region deactivated successfully', region });
   } catch (error: any) {
     console.error('Error deleting region:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
+      return;
+    }
     if (error.code === 'P2025') {
       res.status(404).json({ error: 'Region not found' });
       return;
@@ -708,26 +786,31 @@ export const deleteLocality = async (req: AuthenticatedRequest, res: Response, _
   try {
     const { id } = req.params;
     
-    // Check if locality has admin units
-    const adminUnitsCount = await prisma.adminUnit.count({
-      where: { localityId: id, active: true }
-    });
-    
-    if (adminUnitsCount > 0) {
-      res.status(400).json({ 
-        error: 'Cannot delete locality with active admin units. Please deactivate all admin units first.' 
+    // Use transaction to atomically check for children and update
+    // This prevents race conditions where children could be added between check and update
+    const locality = await prisma.$transaction(async (tx) => {
+      // Check if locality has admin units within the transaction
+      const adminUnitsCount = await tx.adminUnit.count({
+        where: { localityId: id, active: true }
       });
-      return;
-    }
-    
-    const locality = await prisma.locality.update({
-      where: { id },
-      data: { active: false }
+      
+      if (adminUnitsCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot delete locality with active admin units. Please deactivate all admin units first.');
+      }
+      
+      return tx.locality.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
     res.json({ message: 'Locality deactivated successfully', locality });
   } catch (error: any) {
     console.error('Error deleting locality:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
+      return;
+    }
     if (error.code === 'P2025') {
       res.status(404).json({ error: 'Locality not found' });
       return;
@@ -741,26 +824,31 @@ export const deleteAdminUnit = async (req: AuthenticatedRequest, res: Response, 
   try {
     const { id } = req.params;
     
-    // Check if admin unit has districts
-    const districtsCount = await prisma.district.count({
-      where: { adminUnitId: id, active: true }
-    });
-    
-    if (districtsCount > 0) {
-      res.status(400).json({ 
-        error: 'Cannot delete admin unit with active districts. Please deactivate all districts first.' 
+    // Use transaction to atomically check for children and update
+    // This prevents race conditions where children could be added between check and update
+    const adminUnit = await prisma.$transaction(async (tx) => {
+      // Check if admin unit has districts within the transaction
+      const districtsCount = await tx.district.count({
+        where: { adminUnitId: id, active: true }
       });
-      return;
-    }
-    
-    const adminUnit = await prisma.adminUnit.update({
-      where: { id },
-      data: { active: false }
+      
+      if (districtsCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot delete admin unit with active districts. Please deactivate all districts first.');
+      }
+      
+      return tx.adminUnit.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
     res.json({ message: 'Admin unit deactivated successfully', adminUnit });
   } catch (error: any) {
     console.error('Error deleting admin unit:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
+      return;
+    }
     if (error.code === 'P2025') {
       res.status(404).json({ error: 'Admin unit not found' });
       return;
@@ -774,26 +862,31 @@ export const deleteDistrict = async (req: AuthenticatedRequest, res: Response, _
   try {
     const { id } = req.params;
     
-    // Check if district has users
-    const usersCount = await prisma.user.count({
-      where: { districtId: id }
-    });
-    
-    if (usersCount > 0) {
-      res.status(400).json({ 
-        error: 'Cannot delete district with assigned users. Please reassign users first.' 
+    // Use transaction to atomically check for users and update
+    // This prevents race conditions where users could be assigned between check and update
+    const district = await prisma.$transaction(async (tx) => {
+      // Check if district has users within the transaction
+      const usersCount = await tx.user.count({
+        where: { districtId: id }
       });
-      return;
-    }
-    
-    const district = await prisma.district.update({
-      where: { id },
-      data: { active: false }
+      
+      if (usersCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot delete district with assigned users. Please reassign users first.');
+      }
+      
+      return tx.district.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
     res.json({ message: 'District deactivated successfully', district });
   } catch (error: any) {
     console.error('Error deleting district:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
+      return;
+    }
     if (error.code === 'P2025') {
       res.status(404).json({ error: 'District not found' });
       return;

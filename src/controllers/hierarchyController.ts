@@ -308,6 +308,84 @@ async function canAssignAsAdmin(adminUser: any, targetUserId: string): Promise<b
 // Helper function to auto-create 4 sectors for a new geographic level
 // NOTE: For the original (geographic) hierarchy we only need the 4 sectors per level,
 // but we need to link them to their parent sectors in the hierarchy.
+/**
+ * Helper to escape special characters for JSON string matching
+ * Ensures the ID can be safely used in a substring search pattern
+ */
+function escapeJsonStringForSearch(str: string): string {
+  // Escape characters that have special meaning in JSON strings
+  return str
+    .replace(/\\/g, '\\\\')  // Backslash must be first
+    .replace(/"/g, '\\"')     // Double quotes
+    .replace(/\n/g, '\\n')    // Newlines
+    .replace(/\r/g, '\\r')    // Carriage returns
+    .replace(/\t/g, '\\t');   // Tabs
+}
+
+/**
+ * Helper to encode source entity metadata in description field
+ * This allows us to use ID-based lookups instead of fragile name matching
+ */
+function encodeSectorMetadata(sourceEntityId: string, sourceEntityType: string): string {
+  return JSON.stringify({ sourceEntityId, sourceEntityType });
+}
+
+/**
+ * Helper to find a sector by its source entity ID from description metadata
+ */
+async function findSectorBySourceId(
+  sectorTable: 'sectorRegion' | 'sectorLocality' | 'sectorAdminUnit',
+  sourceEntityId: string,
+  sectorType: SectorType
+): Promise<{ id: string } | null> {
+  // Validate that the ID looks like a valid UUID to prevent injection
+  // UUIDs are in format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(sourceEntityId)) {
+    console.warn(`Invalid source entity ID format: ${sourceEntityId}`);
+    return null;
+  }
+  
+  // Build the search pattern with proper JSON escaping
+  // Since we validated it's a UUID, it won't contain special JSON characters,
+  // but we still escape for defense in depth
+  const escapedId = escapeJsonStringForSearch(sourceEntityId);
+  const metadataPattern = `"sourceEntityId":"${escapedId}"`;
+  
+  let sector: { id: string } | null = null;
+  
+  if (sectorTable === 'sectorRegion') {
+    sector = await prisma.sectorRegion.findFirst({
+      where: {
+        sectorType,
+        expatriateRegionId: null,
+        description: { contains: metadataPattern }
+      },
+      select: { id: true }
+    });
+  } else if (sectorTable === 'sectorLocality') {
+    sector = await prisma.sectorLocality.findFirst({
+      where: {
+        sectorType,
+        expatriateRegionId: null,
+        description: { contains: metadataPattern }
+      },
+      select: { id: true }
+    });
+  } else if (sectorTable === 'sectorAdminUnit') {
+    sector = await prisma.sectorAdminUnit.findFirst({
+      where: {
+        sectorType,
+        expatriateRegionId: null,
+        description: { contains: metadataPattern }
+      },
+      select: { id: true }
+    });
+  }
+  
+  return sector;
+}
+
 async function createSectorsForLevel(
   level: 'region' | 'locality' | 'adminUnit' | 'district',
   entityId: string,
@@ -317,12 +395,14 @@ async function createSectorsForLevel(
     switch (level) {
       case 'region': {
         // Regions don't have parent sectors in the geographic hierarchy
+        // Store regionId in description metadata for future ID-based lookups
         for (const sectorType of FIXED_SECTOR_TYPES) {
           await prisma.sectorRegion.create({
             data: {
               name: `${entityName} - ${sectorTypeNames[sectorType]}`,
               sectorType,
-              active: true
+              active: true,
+              description: encodeSectorMetadata(entityId, 'region')
               // No expatriateRegionId = original geographic hierarchy
             }
           });
@@ -334,7 +414,7 @@ async function createSectorsForLevel(
         // Find the parent region to get its sectors
         const locality = await prisma.locality.findUnique({
           where: { id: entityId },
-          select: { regionId: true, name: true, region: { select: { name: true } } }
+          select: { regionId: true, name: true, region: { select: { id: true, name: true } } }
         });
 
         if (!locality || !locality.regionId) {
@@ -342,17 +422,23 @@ async function createSectorsForLevel(
           break;
         }
 
-        // Find the parent region's sectors for each sector type
-        // Sector names are formatted as "Region Name - Sector Type"
+        // Find the parent region's sectors using ID-based lookup
         for (const sectorType of FIXED_SECTOR_TYPES) {
-          const regionName = locality.region?.name || '';
-          const sectorRegion = await prisma.sectorRegion.findFirst({
-            where: {
-              sectorType,
-              expatriateRegionId: null, // Original hierarchy
-              name: { startsWith: `${regionName} -` }
-            }
-          });
+          // Try ID-based lookup first, fallback to name-based for legacy data
+          let sectorRegion = await findSectorBySourceId('sectorRegion', locality.regionId, sectorType);
+          
+          // Fallback to name-based lookup for legacy sectors without metadata
+          if (!sectorRegion) {
+            const regionName = locality.region?.name || '';
+            sectorRegion = await prisma.sectorRegion.findFirst({
+              where: {
+                sectorType,
+                expatriateRegionId: null,
+                name: { startsWith: `${regionName} -` }
+              },
+              select: { id: true }
+            });
+          }
 
           await prisma.sectorLocality.create({
             data: {
@@ -360,6 +446,7 @@ async function createSectorsForLevel(
               sectorType,
               active: true,
               sectorRegionId: sectorRegion?.id || null,
+              description: encodeSectorMetadata(entityId, 'locality')
               // No expatriateRegionId = original geographic hierarchy
             }
           });
@@ -371,7 +458,7 @@ async function createSectorsForLevel(
         // Find the parent locality to get its sectors
         const adminUnit = await prisma.adminUnit.findUnique({
           where: { id: entityId },
-          select: { localityId: true, name: true, locality: { select: { name: true } } }
+          select: { localityId: true, name: true, locality: { select: { id: true, name: true } } }
         });
 
         if (!adminUnit || !adminUnit.localityId) {
@@ -379,17 +466,23 @@ async function createSectorsForLevel(
           break;
         }
 
-        // Find the parent locality's sectors for each sector type
-        // Sector names are formatted as "Locality Name - Sector Type"
+        // Find the parent locality's sectors using ID-based lookup
         for (const sectorType of FIXED_SECTOR_TYPES) {
-          const localityName = adminUnit.locality?.name || '';
-          const sectorLocality = await prisma.sectorLocality.findFirst({
-            where: {
-              sectorType,
-              expatriateRegionId: null, // Original hierarchy
-              name: { startsWith: `${localityName} -` }
-            }
-          });
+          // Try ID-based lookup first, fallback to name-based for legacy data
+          let sectorLocality = await findSectorBySourceId('sectorLocality', adminUnit.localityId, sectorType);
+          
+          // Fallback to name-based lookup for legacy sectors without metadata
+          if (!sectorLocality) {
+            const localityName = adminUnit.locality?.name || '';
+            sectorLocality = await prisma.sectorLocality.findFirst({
+              where: {
+                sectorType,
+                expatriateRegionId: null,
+                name: { startsWith: `${localityName} -` }
+              },
+              select: { id: true }
+            });
+          }
 
           await prisma.sectorAdminUnit.create({
             data: {
@@ -397,6 +490,7 @@ async function createSectorsForLevel(
               sectorType,
               active: true,
               sectorLocalityId: sectorLocality?.id || null,
+              description: encodeSectorMetadata(entityId, 'adminUnit')
               // No expatriateRegionId = original geographic hierarchy
             }
           });
@@ -408,7 +502,7 @@ async function createSectorsForLevel(
         // Find the parent admin unit to get its sectors
         const district = await prisma.district.findUnique({
           where: { id: entityId },
-          select: { adminUnitId: true, name: true, adminUnit: { select: { name: true } } }
+          select: { adminUnitId: true, name: true, adminUnit: { select: { id: true, name: true } } }
         });
 
         if (!district || !district.adminUnitId) {
@@ -416,17 +510,23 @@ async function createSectorsForLevel(
           break;
         }
 
-        // Find the parent admin unit's sectors for each sector type
-        // Sector names are formatted as "Admin Unit Name - Sector Type"
+        // Find the parent admin unit's sectors using ID-based lookup
         for (const sectorType of FIXED_SECTOR_TYPES) {
-          const adminUnitName = district.adminUnit?.name || '';
-          const sectorAdminUnit = await prisma.sectorAdminUnit.findFirst({
-            where: {
-              sectorType,
-              expatriateRegionId: null, // Original hierarchy
-              name: { startsWith: `${adminUnitName} -` }
-            }
-          });
+          // Try ID-based lookup first, fallback to name-based for legacy data
+          let sectorAdminUnit = await findSectorBySourceId('sectorAdminUnit', district.adminUnitId, sectorType);
+          
+          // Fallback to name-based lookup for legacy sectors without metadata
+          if (!sectorAdminUnit) {
+            const adminUnitName = district.adminUnit?.name || '';
+            sectorAdminUnit = await prisma.sectorAdminUnit.findFirst({
+              where: {
+                sectorType,
+                expatriateRegionId: null,
+                name: { startsWith: `${adminUnitName} -` }
+              },
+              select: { id: true }
+            });
+          }
 
           await prisma.sectorDistrict.create({
             data: {
@@ -434,6 +534,7 @@ async function createSectorsForLevel(
               sectorType,
               active: true,
               sectorAdminUnitId: sectorAdminUnit?.id || null,
+              description: encodeSectorMetadata(entityId, 'district')
               // No expatriateRegionId = original geographic hierarchy
             }
           });
@@ -664,12 +765,40 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
 export const updateRegion = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, adminId, active, nationalLevelId } = req.body;
+    const { name, code, description, adminId, active, nationalLevelId, updatedAt: clientUpdatedAt } = req.body;
     
     // Verify admin has permission to modify this region
     if (!await canModifyRegion(req.user, id)) {
       res.status(403).json({ error: 'Forbidden - You do not have permission to modify this region' });
       return;
+    }
+    
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      // Validate the date string before parsing
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
+        return;
+      }
+      
+      const currentRegion = await prisma.region.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentRegion) {
+        const timeDiff = Math.abs(currentRegion.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This region has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
     
     // If assigning an admin, verify the user is within the admin's hierarchy scope
@@ -762,21 +891,170 @@ export const deleteRegion = async (req: AuthenticatedRequest, res: Response, _ne
       return;
     }
     
-    await prisma.region.delete({
-      where: { id }
+    // Use transaction to atomically check for children and update
+    // This prevents race conditions where children could be added between check and update
+    const region = await prisma.$transaction(async (tx) => {
+      // Check if region has active localities within the transaction
+      const activeLocalitiesCount = await tx.locality.count({
+        where: { regionId: id, active: true }
+      });
+      
+      if (activeLocalitiesCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot deactivate region with active localities. Please deactivate all localities first.');
+      }
+      
+      // Soft-delete: set active to false instead of hard delete
+      return tx.region.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
-    res.json({ message: 'Region deleted successfully' });
+    res.json({ message: 'Region deactivated successfully', region });
   } catch (error: any) {
-    console.error('Error deleting region:', error);
+    console.error('Error deactivating region:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
+      return;
+    }
     if (error.code === 'P2025') {
       res.status(404).json({ error: 'Region not found' });
       return;
     }
-    if (error.code === 'P2003') {
-      res.status(400).json({ error: 'Cannot delete region with associated localities or users' });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get all localities (with optional regionId query param for mobile compatibility)
+export const getLocalities = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { regionId } = req.query;
+    
+    // If no regionId provided, return error (regionId is required for security)
+    if (!regionId || typeof regionId !== 'string') {
+      res.status(400).json({ error: 'regionId query parameter is required' });
       return;
     }
+    
+    const localities = await prisma.locality.findMany({
+      where: { regionId, active: true },
+      include: {
+        region: {
+          select: {
+            id: true,
+            name: true,
+            nationalLevelId: true
+          }
+        },
+        _count: {
+          select: {
+            adminUnits: true,
+            users: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+    
+    res.json(localities);
+  } catch (error: any) {
+    console.error('Error getting localities:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get all admin units (with optional localityId query param for mobile compatibility)
+export const getAdminUnits = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { localityId } = req.query;
+    
+    // If no localityId provided, return error (localityId is required for security)
+    if (!localityId || typeof localityId !== 'string') {
+      res.status(400).json({ error: 'localityId query parameter is required' });
+      return;
+    }
+    
+    const adminUnits = await prisma.adminUnit.findMany({
+      where: { localityId, active: true },
+      include: {
+        locality: {
+          select: {
+            id: true,
+            name: true,
+            regionId: true,
+            region: {
+              select: {
+                id: true,
+                name: true,
+                nationalLevelId: true
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            districts: true,
+            users: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+    
+    res.json(adminUnits);
+  } catch (error: any) {
+    console.error('Error getting admin units:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get all districts (with optional adminUnitId query param for mobile compatibility)
+export const getDistricts = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { adminUnitId } = req.query;
+    
+    // If no adminUnitId provided, return error (adminUnitId is required for security)
+    if (!adminUnitId || typeof adminUnitId !== 'string') {
+      res.status(400).json({ error: 'adminUnitId query parameter is required' });
+      return;
+    }
+    
+    const districts = await prisma.district.findMany({
+      where: { adminUnitId, active: true },
+      include: {
+        adminUnit: {
+          select: {
+            id: true,
+            name: true,
+            localityId: true,
+            locality: {
+              select: {
+                id: true,
+                name: true,
+                regionId: true,
+                region: {
+                  select: {
+                    id: true,
+                    name: true,
+                    nationalLevelId: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        _count: {
+          select: {
+            users: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+    
+    res.json(districts);
+  } catch (error: any) {
+    console.error('Error getting districts:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -786,7 +1064,7 @@ export const getLocalitiesByRegion = async (req: AuthenticatedRequest, res: Resp
   try {
     const { regionId } = req.params;
     const localities = await prisma.locality.findMany({
-      where: { regionId },
+      where: { regionId, active: true },
       include: {
         region: {
           select: {
@@ -933,12 +1211,39 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
 export const updateLocality = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, regionId, adminId, active } = req.body;
+    const { name, code, description, regionId, adminId, active, updatedAt: clientUpdatedAt } = req.body;
     
     // Verify admin has permission to modify this locality
     if (!await canModifyLocality(req.user, id)) {
       res.status(403).json({ error: 'Forbidden - You do not have permission to modify this locality' });
       return;
+    }
+    
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
+        return;
+      }
+      
+      const currentLocality = await prisma.locality.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentLocality) {
+        const timeDiff = Math.abs(currentLocality.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This locality has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
     
     // If assigning an admin, verify the user is within the admin's hierarchy scope
@@ -1019,19 +1324,34 @@ export const deleteLocality = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
     
-    await prisma.locality.delete({
-      where: { id }
+    // Use transaction to atomically check for children and update
+    // This prevents race conditions where children could be added between check and update
+    const locality = await prisma.$transaction(async (tx) => {
+      // Check if locality has active admin units within the transaction
+      const activeAdminUnitsCount = await tx.adminUnit.count({
+        where: { localityId: id, active: true }
+      });
+      
+      if (activeAdminUnitsCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot deactivate locality with active admin units. Please deactivate all admin units first.');
+      }
+      
+      // Soft-delete: set active to false instead of hard delete
+      return tx.locality.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
-    res.json({ message: 'Locality deleted successfully' });
+    res.json({ message: 'Locality deactivated successfully', locality });
   } catch (error: any) {
-    console.error('Error deleting locality:', error);
-    if (error.code === 'P2025') {
-      res.status(404).json({ error: 'Locality not found' });
+    console.error('Error deactivating locality:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
       return;
     }
-    if (error.code === 'P2003') {
-      res.status(400).json({ error: 'Cannot delete locality with associated admin units or users' });
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Locality not found' });
       return;
     }
     res.status(500).json({ error: 'Internal server error' });
@@ -1043,7 +1363,7 @@ export const getAdminUnitsByLocality = async (req: AuthenticatedRequest, res: Re
   try {
     const { localityId } = req.params;
     const adminUnits = await prisma.adminUnit.findMany({
-      where: { localityId },
+      where: { localityId, active: true },
       include: {
         locality: {
           select: {
@@ -1201,12 +1521,39 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
 export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, localityId, adminId, active } = req.body;
+    const { name, code, description, localityId, adminId, active, updatedAt: clientUpdatedAt } = req.body;
     
     // Verify admin has permission to modify this admin unit
     if (!await canModifyAdminUnit(req.user, id)) {
       res.status(403).json({ error: 'Forbidden - You do not have permission to modify this administrative unit' });
       return;
+    }
+    
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
+        return;
+      }
+      
+      const currentAdminUnit = await prisma.adminUnit.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentAdminUnit) {
+        const timeDiff = Math.abs(currentAdminUnit.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This administrative unit has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
     
     // If assigning an admin, verify the user is within the admin's hierarchy scope
@@ -1291,19 +1638,34 @@ export const deleteAdminUnit = async (req: AuthenticatedRequest, res: Response, 
       return;
     }
     
-    await prisma.adminUnit.delete({
-      where: { id }
+    // Use transaction to atomically check for children and update
+    // This prevents race conditions where children could be added between check and update
+    const adminUnit = await prisma.$transaction(async (tx) => {
+      // Check if admin unit has active districts within the transaction
+      const activeDistrictsCount = await tx.district.count({
+        where: { adminUnitId: id, active: true }
+      });
+      
+      if (activeDistrictsCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot deactivate admin unit with active districts. Please deactivate all districts first.');
+      }
+      
+      // Soft-delete: set active to false instead of hard delete
+      return tx.adminUnit.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
-    res.json({ message: 'Administrative unit deleted successfully' });
+    res.json({ message: 'Administrative unit deactivated successfully', adminUnit });
   } catch (error: any) {
-    console.error('Error deleting administrative unit:', error);
-    if (error.code === 'P2025') {
-      res.status(404).json({ error: 'Administrative unit not found' });
+    console.error('Error deactivating administrative unit:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
       return;
     }
-    if (error.code === 'P2003') {
-      res.status(400).json({ error: 'Cannot delete administrative unit with associated districts or users' });
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Administrative unit not found' });
       return;
     }
     res.status(500).json({ error: 'Internal server error' });
@@ -1315,7 +1677,7 @@ export const getDistrictsByAdminUnit = async (req: AuthenticatedRequest, res: Re
   try {
     const { adminUnitId } = req.params;
     const districts = await prisma.district.findMany({
-      where: { adminUnitId },
+      where: { adminUnitId, active: true },
       include: {
         adminUnit: {
           select: {
@@ -1504,12 +1866,40 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
 export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, adminUnitId, adminId, active } = req.body;
+    const { name, code, description, adminUnitId, adminId, active, updatedAt: clientUpdatedAt } = req.body;
     
     // Verify admin has permission to modify this district
     if (!await canModifyDistrict(req.user, id)) {
       res.status(403).json({ error: 'Forbidden - You do not have permission to modify this district' });
       return;
+    }
+    
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      // Validate the date string before parsing
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
+        return;
+      }
+      
+      const currentDistrict = await prisma.district.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentDistrict) {
+        const timeDiff = Math.abs(currentDistrict.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This district has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
     }
     
     // If assigning an admin, verify the user is within the admin's hierarchy scope
@@ -1596,19 +1986,34 @@ export const deleteDistrict = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
     
-    await prisma.district.delete({
-      where: { id }
+    // Use transaction to atomically check for users and update
+    // This prevents race conditions where users could be added between check and update
+    const district = await prisma.$transaction(async (tx) => {
+      // Check if district has assigned users within the transaction
+      const usersCount = await tx.user.count({
+        where: { districtId: id }
+      });
+      
+      if (usersCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot deactivate district with assigned users. Please reassign users first.');
+      }
+      
+      // Soft-delete: set active to false instead of hard delete
+      return tx.district.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
-    res.json({ message: 'District deleted successfully' });
+    res.json({ message: 'District deactivated successfully', district });
   } catch (error: any) {
-    console.error('Error deleting district:', error);
-    if (error.code === 'P2025') {
-      res.status(404).json({ error: 'District not found' });
+    console.error('Error deactivating district:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
       return;
     }
-    if (error.code === 'P2003') {
-      res.status(400).json({ error: 'Cannot delete district with associated users' });
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'District not found' });
       return;
     }
     res.status(500).json({ error: 'Internal server error' });
@@ -1901,7 +2306,34 @@ export const createNationalLevel = async (req: AuthenticatedRequest, res: Respon
 export const updateNationalLevel = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, code, description, active } = req.body;
+    const { name, code, description, active, updatedAt: clientUpdatedAt } = req.body;
+    
+    // Optimistic locking: check if record has been modified since client fetched it
+    if (clientUpdatedAt) {
+      const clientTime = new Date(clientUpdatedAt);
+      if (isNaN(clientTime.getTime())) {
+        res.status(400).json({ 
+          error: 'Invalid updatedAt format. Please provide a valid ISO date string.',
+          code: 'INVALID_DATE_FORMAT'
+        });
+        return;
+      }
+      
+      const currentNationalLevel = await prisma.nationalLevel.findUnique({
+        where: { id },
+        select: { updatedAt: true }
+      });
+      if (currentNationalLevel) {
+        const timeDiff = Math.abs(currentNationalLevel.updatedAt.getTime() - clientTime.getTime());
+        if (timeDiff >= 1000) {
+          res.status(409).json({ 
+            error: 'This national level has been modified by another user. Please refresh and try again.',
+            code: 'OPTIMISTIC_LOCK_CONFLICT'
+          });
+          return;
+        }
+      }
+    }
     
     const nationalLevel = await prisma.nationalLevel.update({
       where: { id },
@@ -1916,6 +2348,10 @@ export const updateNationalLevel = async (req: AuthenticatedRequest, res: Respon
     res.json(nationalLevel);
   } catch (error: any) {
     console.error('Error updating national level:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'National level not found' });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -1925,13 +2361,36 @@ export const deleteNationalLevel = async (req: AuthenticatedRequest, res: Respon
   try {
     const { id } = req.params;
     
-    await prisma.nationalLevel.delete({
-      where: { id }
+    // Use transaction to atomically check for children and update
+    // This prevents race conditions where children could be added between check and update
+    const nationalLevel = await prisma.$transaction(async (tx) => {
+      // Check if national level has active regions within the transaction
+      const activeRegionsCount = await tx.region.count({
+        where: { nationalLevelId: id, active: true }
+      });
+      
+      if (activeRegionsCount > 0) {
+        throw new Error('ACTIVE_CHILDREN:Cannot deactivate national level with active regions. Please deactivate all regions first.');
+      }
+      
+      // Soft-delete: set active to false instead of hard delete
+      return tx.nationalLevel.update({
+        where: { id },
+        data: { active: false }
+      });
     });
     
-    res.json({ message: 'National level deleted successfully' });
+    res.json({ message: 'National level deactivated successfully', nationalLevel });
   } catch (error: any) {
-    console.error('Error deleting national level:', error);
+    console.error('Error deactivating national level:', error);
+    if (error.message?.startsWith('ACTIVE_CHILDREN:')) {
+      res.status(400).json({ error: error.message.replace('ACTIVE_CHILDREN:', '') });
+      return;
+    }
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'National level not found' });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 };
