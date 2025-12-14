@@ -36,6 +36,33 @@ const server = createServer(app);
 
 const enableVerboseLogging = process.env.NODE_ENV !== 'production';
 
+// Common bot/scanner paths to filter from verbose logging
+const botPaths = [
+  '/login.html',
+  '/login.jsp',
+  '/login',
+  '/admin',
+  '/admin.html',
+  '/admin.jsp',
+  '/wp-admin',
+  '/wp-login.php',
+  '/phpmyadmin',
+  '/.env',
+  '/doc',
+  '/docs',
+  '/documentation',
+  '/api-docs',
+  '/swagger',
+  '/.git',
+  '/.git/config',
+  '/robots.txt',
+  '/sitemap.xml',
+];
+
+const isBotPath = (url: string): boolean => {
+  return botPaths.some(path => url.startsWith(path));
+};
+
 // CORS configuration - Allow specific origins with credentials
 const allowedOrigins: string[] = [
   'https://ppsudan.org',
@@ -78,8 +105,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   // Generate request ID
   const requestId = Math.random().toString(36).substring(2, 10);
   
-  // Log basic request info
-  console.log(`[${requestId}] ${new Date().toISOString()} ${req.method} ${req.url}`);
+  // Skip verbose logging for common bot/scanner paths
+  const skipVerboseLogging = isBotPath(req.url);
+  
+  // Log basic request info (always log, but less verbose for bot paths)
+  if (!skipVerboseLogging) {
+    console.log(`[${requestId}] ${new Date().toISOString()} ${req.method} ${req.url}`);
+  }
   
   // Log request headers for debugging authentication issues
   if (req.url.includes('/auth/')) {
@@ -99,6 +131,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const originalSend = res.send.bind(res);
   res.send = function(body: any) {
     const duration = Date.now() - start;
+    
+    // Skip verbose logging for bot paths (only log 5xx errors)
+    if (skipVerboseLogging && res.statusCode < 500) {
+      // Silently handle bot requests - don't log 404s
+      return originalSend(body);
+    }
     
     // Log response status and time
     console.log(`[${requestId}] Response ${res.statusCode} (${duration}ms)`);
@@ -158,7 +196,10 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // Not found handler
 app.use((req: Request, res: Response, _next: NextFunction) => {
-  console.log('404 Not Found:', req.method, req.url);
+  // Only log 404s for non-bot paths to reduce noise
+  if (!isBotPath(req.url)) {
+    console.log('404 Not Found:', req.method, req.url);
+  }
   res.status(404).json({ error: 'Not found' });
 });
 
