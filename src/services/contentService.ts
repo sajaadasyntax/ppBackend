@@ -539,8 +539,19 @@ export const getSurveys = async (userId: string, adminUser: any = null): Promise
     // Transform data to match expected format
     return surveys.map(survey => {
       const isCompleted = survey.responses.length > 0;
-      const questions = JSON.parse(survey.questions);
-      const questionsCount = Array.isArray(questions) ? questions.length : 0;
+      // Safely parse questions JSON - handle invalid JSON gracefully
+      let questions = [];
+      let questionsCount = 0;
+      try {
+        if (survey.questions) {
+          questions = JSON.parse(survey.questions);
+          questionsCount = Array.isArray(questions) ? questions.length : 0;
+        }
+      } catch (parseError) {
+        console.error(`Error parsing questions for survey ${survey.id}:`, parseError);
+        questions = [];
+        questionsCount = 0;
+      }
       
       return {
         id: survey.id,
@@ -596,8 +607,19 @@ export const getPublicSurveys = async (userId: string, adminUser: any = null): P
 
     return surveys.map(survey => {
       const isCompleted = survey.responses.length > 0;
-      const questions = JSON.parse(survey.questions);
-      const questionsCount = Array.isArray(questions) ? questions.length : 0;
+      // Safely parse questions JSON - handle invalid JSON gracefully
+      let questions = [];
+      let questionsCount = 0;
+      try {
+        if (survey.questions) {
+          questions = JSON.parse(survey.questions);
+          questionsCount = Array.isArray(questions) ? questions.length : 0;
+        }
+      } catch (parseError) {
+        console.error(`Error parsing questions for survey ${survey.id}:`, parseError);
+        questions = [];
+        questionsCount = 0;
+      }
       
       return {
         id: survey.id,
@@ -651,8 +673,19 @@ export const getMemberSurveys = async (userId: string, adminUser: any = null): P
 
     return surveys.map(survey => {
       const isCompleted = survey.responses.length > 0;
-      const questions = JSON.parse(survey.questions);
-      const questionsCount = Array.isArray(questions) ? questions.length : 0;
+      // Safely parse questions JSON - handle invalid JSON gracefully
+      let questions = [];
+      let questionsCount = 0;
+      try {
+        if (survey.questions) {
+          questions = JSON.parse(survey.questions);
+          questionsCount = Array.isArray(questions) ? questions.length : 0;
+        }
+      } catch (parseError) {
+        console.error(`Error parsing questions for survey ${survey.id}:`, parseError);
+        questions = [];
+        questionsCount = 0;
+      }
       
       return {
         id: survey.id,
@@ -703,8 +736,19 @@ export const getSurveyById = async (surveyId: string, userId: string): Promise<a
     }
 
     const isCompleted = survey.responses.length > 0;
-    const questions = JSON.parse(survey.questions);
-    const questionsCount = Array.isArray(questions) ? questions.length : 0;
+    // Safely parse questions JSON - handle invalid JSON gracefully
+    let questions = [];
+    let questionsCount = 0;
+    try {
+      if (survey.questions) {
+        questions = JSON.parse(survey.questions);
+        questionsCount = Array.isArray(questions) ? questions.length : 0;
+      }
+    } catch (parseError) {
+      console.error(`Error parsing questions for survey ${survey.id}:`, parseError);
+      questions = [];
+      questionsCount = 0;
+    }
     
     return {
       id: survey.id,
