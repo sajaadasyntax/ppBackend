@@ -10,6 +10,7 @@
     "generate": "prisma generate",
     "seed": "ts-node prisma/seed.ts",
     "seed:test-users": "ts-node prisma/seed-test-users.ts",
+    "assign-districts": "ts-node prisma/assign-users-to-districts.ts",
     "setup": "ts-node src/dev-setup.ts",
     "studio": "prisma studio",
     "test": "jest"
