@@ -429,15 +429,15 @@ async function createSectorsForLevel(
           
           // Fallback to name-based lookup for legacy sectors without metadata
           if (!sectorRegion) {
-            const regionName = locality.region?.name || '';
+          const regionName = locality.region?.name || '';
             sectorRegion = await prisma.sectorRegion.findFirst({
-              where: {
-                sectorType,
+            where: {
+              sectorType,
                 expatriateRegionId: null,
-                name: { startsWith: `${regionName} -` }
+              name: { startsWith: `${regionName} -` }
               },
               select: { id: true }
-            });
+          });
           }
 
           await prisma.sectorLocality.create({
@@ -473,15 +473,15 @@ async function createSectorsForLevel(
           
           // Fallback to name-based lookup for legacy sectors without metadata
           if (!sectorLocality) {
-            const localityName = adminUnit.locality?.name || '';
+          const localityName = adminUnit.locality?.name || '';
             sectorLocality = await prisma.sectorLocality.findFirst({
-              where: {
-                sectorType,
+            where: {
+              sectorType,
                 expatriateRegionId: null,
-                name: { startsWith: `${localityName} -` }
+              name: { startsWith: `${localityName} -` }
               },
               select: { id: true }
-            });
+          });
           }
 
           await prisma.sectorAdminUnit.create({
@@ -517,15 +517,15 @@ async function createSectorsForLevel(
           
           // Fallback to name-based lookup for legacy sectors without metadata
           if (!sectorAdminUnit) {
-            const adminUnitName = district.adminUnit?.name || '';
+          const adminUnitName = district.adminUnit?.name || '';
             sectorAdminUnit = await prisma.sectorAdminUnit.findFirst({
-              where: {
-                sectorType,
+            where: {
+              sectorType,
                 expatriateRegionId: null,
-                name: { startsWith: `${adminUnitName} -` }
+              name: { startsWith: `${adminUnitName} -` }
               },
               select: { id: true }
-            });
+          });
           }
 
           await prisma.sectorDistrict.create({

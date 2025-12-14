@@ -811,12 +811,12 @@ export const updateUserHierarchy = async (req: AuthenticatedRequest, res: Respon
           updateData.regionId = regionId;
           updateData.nationalLevelId = region.nationalLevelId;
           break;
-        }
+      }
         
         default:
           res.status(400).json({ error: 'Invalid hierarchy level. Must be one of: region, locality, adminUnit, district' });
           return;
-      }
+    }
     }
     // If hierarchyLevel is 'none' or not provided, all IDs remain null (user removed from hierarchy)
 

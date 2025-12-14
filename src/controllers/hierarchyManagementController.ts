@@ -507,7 +507,7 @@ export const updateRegion = async (req: AuthenticatedRequest, res: Response, _ne
             error: 'This region has been modified by another user. Please refresh and try again.',
             code: 'OPTIMISTIC_LOCK_CONFLICT'
           });
-          return;
+        return;
         }
       }
     }
@@ -568,7 +568,7 @@ export const updateLocality = async (req: AuthenticatedRequest, res: Response, _
             error: 'This locality has been modified by another user. Please refresh and try again.',
             code: 'OPTIMISTIC_LOCK_CONFLICT'
           });
-          return;
+        return;
         }
       }
     }
@@ -633,7 +633,7 @@ export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, 
             error: 'This admin unit has been modified by another user. Please refresh and try again.',
             code: 'OPTIMISTIC_LOCK_CONFLICT'
           });
-          return;
+        return;
         }
       }
     }
@@ -700,7 +700,7 @@ export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _
             error: 'This district has been modified by another user. Please refresh and try again.',
             code: 'OPTIMISTIC_LOCK_CONFLICT'
           });
-          return;
+        return;
         }
       }
     }
@@ -753,16 +753,16 @@ export const deleteRegion = async (req: AuthenticatedRequest, res: Response, _ne
     const region = await prisma.$transaction(async (tx) => {
       // Check if region has localities within the transaction
       const localitiesCount = await tx.locality.count({
-        where: { regionId: id, active: true }
-      });
-      
-      if (localitiesCount > 0) {
+      where: { regionId: id, active: true }
+    });
+    
+    if (localitiesCount > 0) {
         throw new Error('ACTIVE_CHILDREN:Cannot delete region with active localities. Please deactivate all localities first.');
-      }
-      
+    }
+    
       return tx.region.update({
-        where: { id },
-        data: { active: false }
+      where: { id },
+      data: { active: false }
       });
     });
     
@@ -791,16 +791,16 @@ export const deleteLocality = async (req: AuthenticatedRequest, res: Response, _
     const locality = await prisma.$transaction(async (tx) => {
       // Check if locality has admin units within the transaction
       const adminUnitsCount = await tx.adminUnit.count({
-        where: { localityId: id, active: true }
-      });
-      
-      if (adminUnitsCount > 0) {
+      where: { localityId: id, active: true }
+    });
+    
+    if (adminUnitsCount > 0) {
         throw new Error('ACTIVE_CHILDREN:Cannot delete locality with active admin units. Please deactivate all admin units first.');
-      }
-      
+    }
+    
       return tx.locality.update({
-        where: { id },
-        data: { active: false }
+      where: { id },
+      data: { active: false }
       });
     });
     
@@ -829,16 +829,16 @@ export const deleteAdminUnit = async (req: AuthenticatedRequest, res: Response, 
     const adminUnit = await prisma.$transaction(async (tx) => {
       // Check if admin unit has districts within the transaction
       const districtsCount = await tx.district.count({
-        where: { adminUnitId: id, active: true }
-      });
-      
-      if (districtsCount > 0) {
+      where: { adminUnitId: id, active: true }
+    });
+    
+    if (districtsCount > 0) {
         throw new Error('ACTIVE_CHILDREN:Cannot delete admin unit with active districts. Please deactivate all districts first.');
-      }
-      
+    }
+    
       return tx.adminUnit.update({
-        where: { id },
-        data: { active: false }
+      where: { id },
+      data: { active: false }
       });
     });
     
@@ -867,16 +867,16 @@ export const deleteDistrict = async (req: AuthenticatedRequest, res: Response, _
     const district = await prisma.$transaction(async (tx) => {
       // Check if district has users within the transaction
       const usersCount = await tx.user.count({
-        where: { districtId: id }
-      });
-      
-      if (usersCount > 0) {
+      where: { districtId: id }
+    });
+    
+    if (usersCount > 0) {
         throw new Error('ACTIVE_CHILDREN:Cannot delete district with assigned users. Please reassign users first.');
-      }
-      
+    }
+    
       return tx.district.update({
-        where: { id },
-        data: { active: false }
+      where: { id },
+      data: { active: false }
       });
     });
     
