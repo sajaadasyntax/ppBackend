@@ -589,8 +589,11 @@ export const getSurveys = async (userId: string, adminUser: any = null): Promise
 // Get public surveys
 export const getPublicSurveys = async (userId: string, adminUser: any = null): Promise<any[]> => {
   try {
+    console.log(`[getPublicSurveys] Called for userId: ${userId}, adminUser:`, adminUser ? { id: adminUser.id, email: adminUser.email } : 'null');
     const baseClause = adminUser ? await buildContentWhereClause(adminUser) : { published: true };
     const whereClause = { ...baseClause, audience: 'public' };
+    
+    console.log(`[getPublicSurveys] Where clause:`, JSON.stringify(whereClause, null, 2));
 
     const surveys = await prisma.survey.findMany({
       where: whereClause,
@@ -603,7 +606,7 @@ export const getPublicSurveys = async (userId: string, adminUser: any = null): P
       }
     });
 
-    console.log(`Found ${surveys.length} public surveys matching criteria`);
+    console.log(`[getPublicSurveys] Found ${surveys.length} public surveys matching criteria`);
 
     return surveys.map(survey => {
       const isCompleted = survey.responses.length > 0;
@@ -655,8 +658,11 @@ export const getPublicSurveys = async (userId: string, adminUser: any = null): P
 // Get member surveys
 export const getMemberSurveys = async (userId: string, adminUser: any = null): Promise<any[]> => {
   try {
+    console.log(`[getMemberSurveys] Called for userId: ${userId}, adminUser:`, adminUser ? { id: adminUser.id, email: adminUser.email } : 'null');
     const baseClause = adminUser ? await buildContentWhereClause(adminUser) : { published: true };
     const whereClause = { ...baseClause, audience: 'member' };
+    
+    console.log(`[getMemberSurveys] Where clause:`, JSON.stringify(whereClause, null, 2));
 
     const surveys = await prisma.survey.findMany({
       where: whereClause,
@@ -669,7 +675,7 @@ export const getMemberSurveys = async (userId: string, adminUser: any = null): P
       }
     });
 
-    console.log(`Found ${surveys.length} member surveys matching criteria`);
+    console.log(`[getMemberSurveys] Found ${surveys.length} member surveys matching criteria`);
 
     return surveys.map(survey => {
       const isCompleted = survey.responses.length > 0;
