@@ -49,41 +49,126 @@ export async function buildContentWhereClause(user: any): Promise<any> {
     return { published: true };
   }
 
+  // If user has districtId but missing parent hierarchy IDs, derive them from the district
+  let resolvedHierarchy = { ...userWithHierarchy };
+  if (userWithHierarchy.districtId && (!userWithHierarchy.adminUnitId || !userWithHierarchy.localityId || !userWithHierarchy.regionId || !userWithHierarchy.nationalLevelId)) {
+    try {
+      const district = await prisma.district.findUnique({
+        where: { id: userWithHierarchy.districtId },
+        include: {
+          adminUnit: {
+            include: {
+              locality: {
+                include: {
+                  region: {
+                    select: { id: true, nationalLevelId: true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+      
+      if (district) {
+        // Derive missing parent IDs from district relationships
+        resolvedHierarchy.adminUnitId = resolvedHierarchy.adminUnitId || district.adminUnitId;
+        const adminUnit = district.adminUnit;
+        if (adminUnit) {
+          const locality = adminUnit.locality;
+          if (locality) {
+            resolvedHierarchy.localityId = resolvedHierarchy.localityId || adminUnit.localityId;
+            const region = locality.region;
+            if (region) {
+              resolvedHierarchy.regionId = resolvedHierarchy.regionId || locality.regionId;
+              resolvedHierarchy.nationalLevelId = resolvedHierarchy.nationalLevelId || region.nationalLevelId;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error deriving hierarchy from district:', error);
+      // Continue with original hierarchy values if lookup fails
+    }
+  }
+
+  // If user has sectorDistrictId but missing parent sector hierarchy IDs, derive them
+  if (userWithHierarchy.sectorDistrictId && (!userWithHierarchy.sectorAdminUnitId || !userWithHierarchy.sectorLocalityId || !userWithHierarchy.sectorRegionId || !userWithHierarchy.sectorNationalLevelId)) {
+    try {
+      const sectorDistrict = await prisma.sectorDistrict.findUnique({
+        where: { id: userWithHierarchy.sectorDistrictId },
+        include: {
+          sectorAdminUnit: {
+            include: {
+              sectorLocality: {
+                include: {
+                  sectorRegion: {
+                    select: { id: true, sectorNationalLevelId: true }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+      
+      if (sectorDistrict) {
+        // Derive missing parent IDs from sector district relationships
+        resolvedHierarchy.sectorAdminUnitId = resolvedHierarchy.sectorAdminUnitId || sectorDistrict.sectorAdminUnitId;
+        const sectorAdminUnit = sectorDistrict.sectorAdminUnit;
+        if (sectorAdminUnit) {
+          const sectorLocality = sectorAdminUnit.sectorLocality;
+          if (sectorLocality) {
+            resolvedHierarchy.sectorLocalityId = resolvedHierarchy.sectorLocalityId || sectorAdminUnit.sectorLocalityId;
+            const sectorRegion = sectorLocality.sectorRegion;
+            if (sectorRegion) {
+              resolvedHierarchy.sectorRegionId = resolvedHierarchy.sectorRegionId || sectorLocality.sectorRegionId;
+              resolvedHierarchy.sectorNationalLevelId = resolvedHierarchy.sectorNationalLevelId || sectorRegion.sectorNationalLevelId;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error deriving sector hierarchy from sector district:', error);
+      // Continue with original hierarchy values if lookup fails
+    }
+  }
+
   const whereClause: any = { published: true };
   const orConditions: any[] = [];
 
   // Build filter based on active hierarchy with CASCADING support
-  switch (userWithHierarchy.activeHierarchy) {
+  switch (resolvedHierarchy.activeHierarchy) {
     case 'ORIGINAL':
       // Cascading filter for original geographic hierarchy
       // User sees content targeted at their level AND all parent levels
       
       // 1. Content specifically for user's district (most specific)
-      if (userWithHierarchy.districtId) {
-        orConditions.push({ targetDistrictId: userWithHierarchy.districtId });
+      if (resolvedHierarchy.districtId) {
+        orConditions.push({ targetDistrictId: resolvedHierarchy.districtId });
       }
       
       // 2. Content for user's admin unit (visible to all districts in this admin unit)
-      if (userWithHierarchy.adminUnitId) {
+      if (resolvedHierarchy.adminUnitId) {
         orConditions.push({ 
-          targetAdminUnitId: userWithHierarchy.adminUnitId,
+          targetAdminUnitId: resolvedHierarchy.adminUnitId,
           targetDistrictId: null  // Admin unit level content (not district-specific)
         });
       }
       
       // 3. Content for user's locality (visible to all admin units/districts in this locality)
-      if (userWithHierarchy.localityId) {
+      if (resolvedHierarchy.localityId) {
         orConditions.push({ 
-          targetLocalityId: userWithHierarchy.localityId,
+          targetLocalityId: resolvedHierarchy.localityId,
           targetAdminUnitId: null,
           targetDistrictId: null
         });
       }
       
       // 4. Content for user's region (visible to all localities/admin units/districts in this region)
-      if (userWithHierarchy.regionId) {
+      if (resolvedHierarchy.regionId) {
         orConditions.push({ 
-          targetRegionId: userWithHierarchy.regionId,
+          targetRegionId: resolvedHierarchy.regionId,
           targetLocalityId: null,
           targetAdminUnitId: null,
           targetDistrictId: null
@@ -91,9 +176,9 @@ export async function buildContentWhereClause(user: any): Promise<any> {
       }
       
       // 5. Content for user's national level (visible to all regions and below)
-      if (userWithHierarchy.nationalLevelId) {
+      if (resolvedHierarchy.nationalLevelId) {
         orConditions.push({ 
-          targetNationalLevelId: userWithHierarchy.nationalLevelId,
+          targetNationalLevelId: resolvedHierarchy.nationalLevelId,
           targetRegionId: null,
           targetLocalityId: null,
           targetAdminUnitId: null,
@@ -120,8 +205,8 @@ export async function buildContentWhereClause(user: any): Promise<any> {
     case 'EXPATRIATE':
       // Filter by expatriate hierarchy
       // Expatriate users see content targeted at their expatriate region + global content
-      if (userWithHierarchy.expatriateRegionId) {
-        orConditions.push({ targetExpatriateRegionId: userWithHierarchy.expatriateRegionId });
+      if (resolvedHierarchy.expatriateRegionId) {
+        orConditions.push({ targetExpatriateRegionId: resolvedHierarchy.expatriateRegionId });
       }
       
       // Global content (no specific targeting)
@@ -145,31 +230,31 @@ export async function buildContentWhereClause(user: any): Promise<any> {
       // User sees content targeted at their level AND all parent levels
       
       // 1. Content specifically for user's sector district (most specific)
-      if (userWithHierarchy.sectorDistrictId) {
-        orConditions.push({ targetSectorDistrictId: userWithHierarchy.sectorDistrictId });
+      if (resolvedHierarchy.sectorDistrictId) {
+        orConditions.push({ targetSectorDistrictId: resolvedHierarchy.sectorDistrictId });
       }
       
       // 2. Content for user's sector admin unit
-      if (userWithHierarchy.sectorAdminUnitId) {
+      if (resolvedHierarchy.sectorAdminUnitId) {
         orConditions.push({ 
-          targetSectorAdminUnitId: userWithHierarchy.sectorAdminUnitId,
+          targetSectorAdminUnitId: resolvedHierarchy.sectorAdminUnitId,
           targetSectorDistrictId: null
         });
       }
       
       // 3. Content for user's sector locality
-      if (userWithHierarchy.sectorLocalityId) {
+      if (resolvedHierarchy.sectorLocalityId) {
         orConditions.push({ 
-          targetSectorLocalityId: userWithHierarchy.sectorLocalityId,
+          targetSectorLocalityId: resolvedHierarchy.sectorLocalityId,
           targetSectorAdminUnitId: null,
           targetSectorDistrictId: null
         });
       }
       
       // 4. Content for user's sector region
-      if (userWithHierarchy.sectorRegionId) {
+      if (resolvedHierarchy.sectorRegionId) {
         orConditions.push({ 
-          targetSectorRegionId: userWithHierarchy.sectorRegionId,
+          targetSectorRegionId: resolvedHierarchy.sectorRegionId,
           targetSectorLocalityId: null,
           targetSectorAdminUnitId: null,
           targetSectorDistrictId: null
@@ -177,9 +262,9 @@ export async function buildContentWhereClause(user: any): Promise<any> {
       }
       
       // 5. Content for user's sector national level
-      if (userWithHierarchy.sectorNationalLevelId) {
+      if (resolvedHierarchy.sectorNationalLevelId) {
         orConditions.push({ 
-          targetSectorNationalLevelId: userWithHierarchy.sectorNationalLevelId,
+          targetSectorNationalLevelId: resolvedHierarchy.sectorNationalLevelId,
           targetSectorRegionId: null,
           targetSectorLocalityId: null,
           targetSectorAdminUnitId: null,
@@ -205,20 +290,20 @@ export async function buildContentWhereClause(user: any): Promise<any> {
 
     default:
       // If no active hierarchy or unknown, fall back to ORIGINAL hierarchy with cascading
-      if (userWithHierarchy.districtId) {
-        orConditions.push({ targetDistrictId: userWithHierarchy.districtId });
+      if (resolvedHierarchy.districtId) {
+        orConditions.push({ targetDistrictId: resolvedHierarchy.districtId });
       }
-      if (userWithHierarchy.adminUnitId) {
-        orConditions.push({ targetAdminUnitId: userWithHierarchy.adminUnitId, targetDistrictId: null });
+      if (resolvedHierarchy.adminUnitId) {
+        orConditions.push({ targetAdminUnitId: resolvedHierarchy.adminUnitId, targetDistrictId: null });
       }
-      if (userWithHierarchy.localityId) {
-        orConditions.push({ targetLocalityId: userWithHierarchy.localityId, targetAdminUnitId: null, targetDistrictId: null });
+      if (resolvedHierarchy.localityId) {
+        orConditions.push({ targetLocalityId: resolvedHierarchy.localityId, targetAdminUnitId: null, targetDistrictId: null });
       }
-      if (userWithHierarchy.regionId) {
-        orConditions.push({ targetRegionId: userWithHierarchy.regionId, targetLocalityId: null, targetAdminUnitId: null, targetDistrictId: null });
+      if (resolvedHierarchy.regionId) {
+        orConditions.push({ targetRegionId: resolvedHierarchy.regionId, targetLocalityId: null, targetAdminUnitId: null, targetDistrictId: null });
       }
-      if (userWithHierarchy.nationalLevelId) {
-        orConditions.push({ targetNationalLevelId: userWithHierarchy.nationalLevelId, targetRegionId: null, targetLocalityId: null, targetAdminUnitId: null, targetDistrictId: null });
+      if (resolvedHierarchy.nationalLevelId) {
+        orConditions.push({ targetNationalLevelId: resolvedHierarchy.nationalLevelId, targetRegionId: null, targetLocalityId: null, targetAdminUnitId: null, targetDistrictId: null });
       }
       // Global content
       orConditions.push({ 
