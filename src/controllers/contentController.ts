@@ -507,42 +507,60 @@ export const getSurveys = async (req: AuthenticatedRequest, res: Response, _next
 // Get public surveys only - now filtered by hierarchy
 export const getPublicSurveys = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
+    console.log('[getPublicSurveys Controller] Request received:', {
+      path: req.path,
+      method: req.method,
+      user: req.user ? { id: req.user.id, email: req.user.email } : 'no user'
+    });
+    
     const userId = req.user?.id;
     const adminUser = req.user;
     
     if (!userId || !adminUser) {
+      console.error('[getPublicSurveys Controller] Unauthorized - no user');
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
     
-    console.log('Getting public surveys for user with ID:', adminUser.id);
+    console.log('[getPublicSurveys Controller] Getting public surveys for user with ID:', adminUser.id);
     
     const surveys = await contentService.getPublicSurveys(userId, adminUser);
+    console.log('[getPublicSurveys Controller] Returning', surveys.length, 'surveys');
     res.json(surveys);
   } catch (error: any) {
-    console.error('Error in getPublicSurveys controller:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[getPublicSurveys Controller] Error:', error);
+    console.error('[getPublicSurveys Controller] Error stack:', error.stack);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 };
 
 // Get member surveys only
 export const getMemberSurveys = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
+    console.log('[getMemberSurveys Controller] Request received:', {
+      path: req.path,
+      method: req.method,
+      user: req.user ? { id: req.user.id, email: req.user.email } : 'no user'
+    });
+    
     const userId = req.user?.id;
     const adminUser = req.user;
     
     if (!userId || !adminUser) {
+      console.error('[getMemberSurveys Controller] Unauthorized - no user');
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
     
-    console.log('Getting member surveys for user with ID:', adminUser.id);
+    console.log('[getMemberSurveys Controller] Getting member surveys for user with ID:', adminUser.id);
     
     const surveys = await contentService.getMemberSurveys(userId, adminUser);
+    console.log('[getMemberSurveys Controller] Returning', surveys.length, 'surveys');
     res.json(surveys);
   } catch (error: any) {
-    console.error('Error in getMemberSurveys controller:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[getMemberSurveys Controller] Error:', error);
+    console.error('[getMemberSurveys Controller] Error stack:', error.stack);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 };
 
