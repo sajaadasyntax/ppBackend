@@ -53,6 +53,7 @@ export async function buildContentWhereClause(user: any): Promise<any> {
   let resolvedHierarchy = { ...userWithHierarchy };
   if (userWithHierarchy.districtId && (!userWithHierarchy.adminUnitId || !userWithHierarchy.localityId || !userWithHierarchy.regionId || !userWithHierarchy.nationalLevelId)) {
     try {
+      console.log(`Deriving parent hierarchy for user ${user.id} with districtId: ${userWithHierarchy.districtId}`);
       const district = await prisma.district.findUnique({
         where: { id: userWithHierarchy.districtId },
         include: {
@@ -85,6 +86,15 @@ export async function buildContentWhereClause(user: any): Promise<any> {
             }
           }
         }
+        console.log(`Resolved hierarchy for user ${user.id}:`, {
+          districtId: resolvedHierarchy.districtId,
+          adminUnitId: resolvedHierarchy.adminUnitId,
+          localityId: resolvedHierarchy.localityId,
+          regionId: resolvedHierarchy.regionId,
+          nationalLevelId: resolvedHierarchy.nationalLevelId
+        });
+      } else {
+        console.warn(`District ${userWithHierarchy.districtId} not found for user ${user.id}`);
       }
     } catch (error) {
       console.error('Error deriving hierarchy from district:', error);
@@ -137,8 +147,25 @@ export async function buildContentWhereClause(user: any): Promise<any> {
   const whereClause: any = { published: true };
   const orConditions: any[] = [];
 
+  // If activeHierarchy is not set, determine it based on available hierarchy IDs
+  let activeHierarchy = resolvedHierarchy.activeHierarchy;
+  if (!activeHierarchy || activeHierarchy === null || activeHierarchy === undefined) {
+    // Auto-detect hierarchy type based on available IDs
+    if (resolvedHierarchy.districtId || resolvedHierarchy.adminUnitId || resolvedHierarchy.localityId || resolvedHierarchy.regionId || resolvedHierarchy.nationalLevelId) {
+      activeHierarchy = 'ORIGINAL';
+    } else if (resolvedHierarchy.sectorDistrictId || resolvedHierarchy.sectorAdminUnitId || resolvedHierarchy.sectorLocalityId || resolvedHierarchy.sectorRegionId || resolvedHierarchy.sectorNationalLevelId) {
+      activeHierarchy = 'SECTOR';
+    } else if (resolvedHierarchy.expatriateRegionId) {
+      activeHierarchy = 'EXPATRIATE';
+    } else {
+      // Default to ORIGINAL if we have any hierarchy at all
+      activeHierarchy = 'ORIGINAL';
+    }
+    console.log(`Auto-detected activeHierarchy as '${activeHierarchy}' for user ${user?.id}`);
+  }
+
   // Build filter based on active hierarchy with CASCADING support
-  switch (resolvedHierarchy.activeHierarchy) {
+  switch (activeHierarchy) {
     case 'ORIGINAL':
       // Cascading filter for original geographic hierarchy
       // User sees content targeted at their level AND all parent levels
@@ -324,7 +351,14 @@ export async function buildContentWhereClause(user: any): Promise<any> {
   // If we have OR conditions, add them to the where clause
   if (orConditions.length > 0) {
     whereClause.OR = orConditions;
+  } else {
+    // Fallback: if no conditions were added, at least show published content
+    // This should not happen, but provides a safety net
+    console.warn('No OR conditions generated for user hierarchy filtering. User ID:', user?.id, 'Resolved hierarchy:', resolvedHierarchy);
   }
+
+  // Log the final where clause for debugging
+  console.log('Final where clause for user:', user?.id, JSON.stringify(whereClause, null, 2));
 
   return whereClause;
 }
