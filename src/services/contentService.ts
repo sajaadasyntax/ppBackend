@@ -1,7 +1,7 @@
 import prisma from '../utils/prisma';
 import path from 'path';
 import fs from 'fs';
-import { buildBulletinWhereClause, buildContentWhereClause } from './multiHierarchyFilterService';
+import { buildBulletinWhereClause, buildContentWhereClause, buildReportWhereClause } from './multiHierarchyFilterService';
 
 // Helper functions for hierarchical access control (reserved for future use)
 // Reserved for future use
@@ -1143,7 +1143,28 @@ export const subscribe = async (userId: string, planId: string): Promise<any> =>
 // Reports
 export const submitReport = async (userId: string, reportData: any): Promise<any> => {
   try {
-    const { title, type, description, date, attachmentName, regionId, localityId, adminUnitId, districtId } = reportData;
+    const { 
+      title, 
+      type, 
+      description, 
+      date, 
+      attachmentName,
+      // Support both naming conventions (targetRegionId from determineContentHierarchy, regionId from legacy)
+      targetRegionId, 
+      targetLocalityId, 
+      targetAdminUnitId, 
+      targetDistrictId,
+      targetExpatriateRegionId,
+      targetSectorRegionId,
+      targetSectorLocalityId,
+      targetSectorAdminUnitId,
+      targetSectorDistrictId,
+      // Legacy field names (without 'target' prefix)
+      regionId, 
+      localityId, 
+      adminUnitId, 
+      districtId 
+    } = reportData;
     
     // Get the user first to ensure it exists
     const user = await prisma.user.findUnique({
@@ -1154,45 +1175,83 @@ export const submitReport = async (userId: string, reportData: any): Promise<any
       throw new Error('User not found');
     }
     
+    // Resolve hierarchy IDs (prefer targetXxxId, fall back to xxxId for backwards compatibility)
+    const resolvedRegionId = targetRegionId || regionId;
+    const resolvedLocalityId = targetLocalityId || localityId;
+    const resolvedAdminUnitId = targetAdminUnitId || adminUnitId;
+    const resolvedDistrictId = targetDistrictId || districtId;
+    
     // Prepare data with mandatory relations
     const data: any = {
-        title,
-        type,
-        description,
-        date: new Date(date),
+      title,
+      type,
+      description,
+      date: new Date(date),
       attachmentName,
       user: {
         connect: { id: userId }
       }
     };
     
-    // Add hierarchical targeting based on provided IDs
-    if (regionId) {
+    // Add hierarchical targeting based on provided IDs (Original hierarchy)
+    if (resolvedRegionId) {
       data.targetRegion = {
-        connect: { id: regionId }
+        connect: { id: resolvedRegionId }
       };
     }
     
-    if (localityId) {
+    if (resolvedLocalityId) {
       data.targetLocality = {
-        connect: { id: localityId }
+        connect: { id: resolvedLocalityId }
       };
     }
     
-    if (adminUnitId) {
+    if (resolvedAdminUnitId) {
       data.targetAdminUnit = {
-        connect: { id: adminUnitId }
+        connect: { id: resolvedAdminUnitId }
       };
     }
     
-    if (districtId) {
+    if (resolvedDistrictId) {
       data.targetDistrict = {
-        connect: { id: districtId }
+        connect: { id: resolvedDistrictId }
       };
     }
     
-    // If no region is provided, use the user's region
-    if (!regionId && user.regionId) {
+    // Add Expatriate hierarchy targeting
+    if (targetExpatriateRegionId) {
+      data.targetExpatriateRegion = {
+        connect: { id: targetExpatriateRegionId }
+      };
+    }
+    
+    // Add Sector hierarchy targeting
+    if (targetSectorRegionId) {
+      data.targetSectorRegion = {
+        connect: { id: targetSectorRegionId }
+      };
+    }
+    
+    if (targetSectorLocalityId) {
+      data.targetSectorLocality = {
+        connect: { id: targetSectorLocalityId }
+      };
+    }
+    
+    if (targetSectorAdminUnitId) {
+      data.targetSectorAdminUnit = {
+        connect: { id: targetSectorAdminUnitId }
+      };
+    }
+    
+    if (targetSectorDistrictId) {
+      data.targetSectorDistrict = {
+        connect: { id: targetSectorDistrictId }
+      };
+    }
+    
+    // If no region is provided at all, use the user's region as fallback
+    if (!resolvedRegionId && !targetExpatriateRegionId && !targetSectorRegionId && user.regionId) {
       data.targetRegion = {
         connect: { id: user.regionId }
       };
@@ -1212,6 +1271,19 @@ export const submitReport = async (userId: string, reportData: any): Promise<any
       date: report.date.toISOString().split('T')[0],
       status: report.status,
       submittedAt: report.createdAt.toISOString(),
+      // Original hierarchy
+      targetRegionId: report.targetRegionId,
+      targetLocalityId: report.targetLocalityId,
+      targetAdminUnitId: report.targetAdminUnitId,
+      targetDistrictId: report.targetDistrictId,
+      // Expatriate hierarchy
+      targetExpatriateRegionId: report.targetExpatriateRegionId,
+      // Sector hierarchy
+      targetSectorRegionId: report.targetSectorRegionId,
+      targetSectorLocalityId: report.targetSectorLocalityId,
+      targetSectorAdminUnitId: report.targetSectorAdminUnitId,
+      targetSectorDistrictId: report.targetSectorDistrictId,
+      // Legacy field names for backwards compatibility
       regionId: report.targetRegionId,
       localityId: report.targetLocalityId,
       adminUnitId: report.targetAdminUnitId,
@@ -1251,7 +1323,9 @@ export const getUserReports = async (userId: string): Promise<any[]> => {
 export const getAllReports = async (status: string | null, adminUser: any = null): Promise<any[]> => {
   try {
     // Build where clause based on user's active hierarchy
-    let baseWhereClause = await buildContentWhereClause(adminUser);
+    // Use buildReportWhereClause instead of buildContentWhereClause because
+    // reports don't have a 'published' field
+    let baseWhereClause = await buildReportWhereClause(adminUser);
     
     // Add status filter if provided
     const whereClause = status ? { ...baseWhereClause, status } : baseWhereClause;

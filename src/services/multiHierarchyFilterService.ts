@@ -505,8 +505,183 @@ export async function buildAdminContentWhereClause(user: any): Promise<any> {
   return { OR: orConditions };
 }
 
+/**
+ * Build where clause for reports - similar logic to content but WITHOUT the 'published' filter
+ * since Report model doesn't have a published field.
+ * 
+ * For admins viewing reports:
+ * - ADMIN and GENERAL_SECRETARIAT see all reports
+ * - Other admin levels see reports from their hierarchy level and below
+ * 
+ * @param user - User object with hierarchy information
+ * @returns Prisma where clause for filtering reports
+ */
+export async function buildReportWhereClause(user: any): Promise<any> {
+  if (!user) {
+    // If no user, return empty (no reports visible)
+    return {};
+  }
+
+  // Get user's complete hierarchy information including active hierarchy
+  const userWithHierarchy = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      activeHierarchy: true,
+      adminLevel: true,
+      // Original hierarchy
+      nationalLevelId: true,
+      regionId: true,
+      localityId: true,
+      adminUnitId: true,
+      districtId: true,
+      // Expatriate hierarchy
+      expatriateRegionId: true,
+      // Sector hierarchy
+      sectorNationalLevelId: true,
+      sectorRegionId: true,
+      sectorLocalityId: true,
+      sectorAdminUnitId: true,
+      sectorDistrictId: true,
+    }
+  });
+
+  if (!userWithHierarchy) {
+    return {};
+  }
+
+  // Admin and General Secretariat can see ALL reports
+  if (userWithHierarchy.adminLevel === 'ADMIN' || userWithHierarchy.adminLevel === 'GENERAL_SECRETARIAT') {
+    return {}; // No filter - see everything
+  }
+
+  // For other admin levels, show reports from their hierarchy and below
+  const orConditions: any[] = [];
+
+  switch (userWithHierarchy.adminLevel) {
+    case 'NATIONAL_LEVEL':
+      if (userWithHierarchy.nationalLevelId) {
+        orConditions.push({ targetNationalLevelId: userWithHierarchy.nationalLevelId });
+        // Also show reports for child regions
+        const regions = await prisma.region.findMany({
+          where: { nationalLevelId: userWithHierarchy.nationalLevelId },
+          select: { id: true }
+        });
+        if (regions.length > 0) {
+          orConditions.push({ targetRegionId: { in: regions.map(r => r.id) } });
+          // Also get all localities in these regions
+          const localities = await prisma.locality.findMany({
+            where: { regionId: { in: regions.map(r => r.id) } },
+            select: { id: true }
+          });
+          if (localities.length > 0) {
+            orConditions.push({ targetLocalityId: { in: localities.map(l => l.id) } });
+          }
+        }
+      }
+      break;
+
+    case 'REGION':
+      if (userWithHierarchy.regionId) {
+        orConditions.push({ targetRegionId: userWithHierarchy.regionId });
+        // Also show reports for child localities
+        const localities = await prisma.locality.findMany({
+          where: { regionId: userWithHierarchy.regionId },
+          select: { id: true }
+        });
+        if (localities.length > 0) {
+          orConditions.push({ targetLocalityId: { in: localities.map(l => l.id) } });
+          // Also get all admin units in these localities
+          const adminUnits = await prisma.adminUnit.findMany({
+            where: { localityId: { in: localities.map(l => l.id) } },
+            select: { id: true }
+          });
+          if (adminUnits.length > 0) {
+            orConditions.push({ targetAdminUnitId: { in: adminUnits.map(a => a.id) } });
+            // Also get all districts in these admin units
+            const districts = await prisma.district.findMany({
+              where: { adminUnitId: { in: adminUnits.map(a => a.id) } },
+              select: { id: true }
+            });
+            if (districts.length > 0) {
+              orConditions.push({ targetDistrictId: { in: districts.map(d => d.id) } });
+            }
+          }
+        }
+      }
+      break;
+
+    case 'LOCALITY':
+      if (userWithHierarchy.localityId) {
+        orConditions.push({ targetLocalityId: userWithHierarchy.localityId });
+        // Also show reports for child admin units
+        const adminUnits = await prisma.adminUnit.findMany({
+          where: { localityId: userWithHierarchy.localityId },
+          select: { id: true }
+        });
+        if (adminUnits.length > 0) {
+          orConditions.push({ targetAdminUnitId: { in: adminUnits.map(a => a.id) } });
+          // Also get all districts in these admin units
+          const districts = await prisma.district.findMany({
+            where: { adminUnitId: { in: adminUnits.map(a => a.id) } },
+            select: { id: true }
+          });
+          if (districts.length > 0) {
+            orConditions.push({ targetDistrictId: { in: districts.map(d => d.id) } });
+          }
+        }
+      }
+      break;
+
+    case 'ADMIN_UNIT':
+      if (userWithHierarchy.adminUnitId) {
+        orConditions.push({ targetAdminUnitId: userWithHierarchy.adminUnitId });
+        // Also show reports for child districts
+        const districts = await prisma.district.findMany({
+          where: { adminUnitId: userWithHierarchy.adminUnitId },
+          select: { id: true }
+        });
+        if (districts.length > 0) {
+          orConditions.push({ targetDistrictId: { in: districts.map(d => d.id) } });
+        }
+      }
+      break;
+
+    case 'DISTRICT':
+      if (userWithHierarchy.districtId) {
+        orConditions.push({ targetDistrictId: userWithHierarchy.districtId });
+      }
+      break;
+
+    case 'EXPATRIATE_GENERAL':
+      // Expatriate general admins can see all expatriate reports
+      orConditions.push({ targetExpatriateRegionId: { not: null } });
+      break;
+
+    case 'EXPATRIATE_REGION':
+      // Expatriate region admins can see reports for their expatriate region
+      if (userWithHierarchy.expatriateRegionId) {
+        orConditions.push({ targetExpatriateRegionId: userWithHierarchy.expatriateRegionId });
+      }
+      break;
+
+    default:
+      // For USER or unknown admin levels, only show reports they submitted
+      return { userId: user.id };
+  }
+
+  if (orConditions.length === 0) {
+    // If no conditions, only show reports the user submitted
+    return { userId: user.id };
+  }
+
+  console.log('Report where clause for user:', user?.id, JSON.stringify({ OR: orConditions }, null, 2));
+
+  return { OR: orConditions };
+}
+
 export default {
   buildContentWhereClause,
   buildBulletinWhereClause,
-  buildAdminContentWhereClause
+  buildAdminContentWhereClause,
+  buildReportWhereClause
 };
