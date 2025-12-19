@@ -388,78 +388,99 @@ export const getArchiveDocuments = async (req: AuthenticatedRequest, res: Respon
   }
 };
 
+// Configure multer storage for archive documents (outside handler for better performance)
+const archiveStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    // Use process.cwd() for consistent path resolution in both dev and production
+    const uploadDir = path.join(process.cwd(), 'public/uploads/archive');
+    
+    console.log('Archive upload directory:', uploadDir);
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+      console.log('Created archive upload directory:', uploadDir);
+    }
+    
+    cb(null, uploadDir);
+  },
+  filename: (_req, file, cb) => {
+    // Generate unique filename preserving original extension
+    const uniqueSuffix = `${Date.now()}-${uuidv4()}`;
+    const ext = path.extname(file.originalname) || '.pdf';
+    const filename = `archive-${uniqueSuffix}${ext}`;
+    console.log('Generated archive filename:', filename);
+    cb(null, filename);
+  }
+});
+
+const archiveUpload = multer({ 
+  storage: archiveStorage, 
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit for documents
+});
+
 // Upload a new archive document
 export const uploadArchiveDocument = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
-  try {
-    // Configure multer storage for archive documents
-    const storage = multer.diskStorage({
-      destination: (_req, _file, cb) => {
-        const uploadDir = path.join(__dirname, '../../public/uploads/archive');
-        
-        // Create directory if it doesn't exist
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        
-        cb(null, uploadDir);
-      },
-      filename: (_req, file, cb) => {
-        // Generate unique filename
-        const uniqueSuffix = `${Date.now()}-${uuidv4()}`;
-        const ext = path.extname(file.originalname);
-        cb(null, `archive-${uniqueSuffix}${ext}`);
-      }
-    });
-    
-    const upload = multer({ 
-      storage, 
-      limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
-    });
-    
-    upload.single('file')(req as any, res, async (err: any) => {
-      if (err) {
-        console.error('Error uploading file:', err);
+  archiveUpload.single('file')(req as any, res, async (err: any) => {
+    if (err) {
+      console.error('Error uploading archive file:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        res.status(400).json({ error: 'File size exceeds 50MB limit' });
+      } else {
         res.status(400).json({ error: err.message || 'Error uploading file' });
-        return;
       }
+      return;
+    }
 
-      try {
-        // Extract data directly from req.body
-        const title = (req as any).body.title || '';
-        const category = (req as any).body.category || 'document';
+    try {
+      // Extract data directly from req.body
+      const title = (req as any).body.title || '';
+      const category = (req as any).body.category || 'document';
+      
+      // Log what we received
+      console.log('Archive upload - request body:', (req as any).body);
+      console.log('Archive upload - file info:', (req as any).file ? {
+        filename: (req as any).file.filename,
+        originalname: (req as any).file.originalname,
+        size: (req as any).file.size,
+        path: (req as any).file.path
+      } : 'No file');
+      
+      // If file was uploaded, create the document
+      if ((req as any).file) {
+        const filePath = `/uploads/archive/${(req as any).file.filename}`;
         
-        // Log what we received
-        console.log('Upload request body:', (req as any).body);
-        console.log('Upload file:', (req as any).file);
+        const documentData = {
+          title: title || (req as any).file.originalname,
+          category,
+          url: filePath,
+          size: `${((req as any).file.size / (1024 * 1024)).toFixed(2)}MB`,
+          type: path.extname((req as any).file.originalname).substring(1).toLowerCase() || 'pdf'
+        };
         
-        // If file was uploaded, create the document
-        if ((req as any).file) {
-          const filePath = `/uploads/archive/${(req as any).file.filename}`;
-          
-          const documentData = {
-            title,
-            category,
-            url: filePath,
-            size: `${((req as any).file.size / (1024 * 1024)).toFixed(2)}MB`,
-            type: path.extname((req as any).file.originalname).substring(1) || 'pdf'
-          };
-          
-          console.log('Creating document with data:', documentData);
-          
-          const document = await contentService.createArchiveDocument(documentData);
-          res.status(201).json(document);
-        } else {
-          res.status(400).json({ error: 'No file was uploaded' });
-        }
-      } catch (error: any) {
-        console.error('Error creating archive document:', error);
-        res.status(500).json({ error: 'Failed to create archive document: ' + error.message });
+        console.log('Creating archive document with data:', documentData);
+        
+        const document = await contentService.createArchiveDocument(documentData);
+        console.log('Archive document created successfully:', document.id);
+        res.status(201).json(document);
+      } else {
+        console.error('No file received in archive upload request');
+        res.status(400).json({ error: 'No file was uploaded. Please select a file.' });
       }
-    });
-  } catch (error: any) {
-    console.error('Error in uploadArchiveDocument controller:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+    } catch (error: any) {
+      console.error('Error creating archive document:', error);
+      // Clean up uploaded file on error
+      if ((req as any).file) {
+        try {
+          fs.unlinkSync((req as any).file.path);
+          console.log('Cleaned up file after error:', (req as any).file.path);
+        } catch (cleanupErr) {
+          console.error('Error cleaning up file:', cleanupErr);
+        }
+      }
+      res.status(500).json({ error: 'Failed to create archive document: ' + error.message });
+    }
+  });
 };
 
 // Delete an archive document

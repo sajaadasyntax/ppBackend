@@ -16,5 +16,8 @@ router.get('/chatrooms', authenticate, chatController.getUserChatRooms);
 router.get('/chatrooms/:id/messages', authenticate, chatController.getChatMessages);
 router.post('/chatrooms/:id/messages', authenticate, chatController.sendMessage);
 
+// Voice message upload
+router.post('/chatrooms/:id/voice', authenticate, chatController.uploadVoiceMessage);
+
 export default router;
 

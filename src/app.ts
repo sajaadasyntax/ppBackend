@@ -304,8 +304,14 @@ io.on('connection', (socket: any) => {
     console.log(`User ${socket.userId} left room ${roomId}`);
   });
 
-  // Handle new message
-  socket.on('send_message', async ({ roomId, text }: { roomId: string; text: string }) => {
+  // Handle new message (supports text and voice)
+  socket.on('send_message', async ({ roomId, text, messageType = 'TEXT', mediaUrl, duration }: { 
+    roomId: string; 
+    text?: string; 
+    messageType?: 'TEXT' | 'VOICE' | 'IMAGE';
+    mediaUrl?: string;
+    duration?: number;
+  }) => {
     try {
       // Verify membership
       const membership = await prisma.chatMembership.findUnique({
@@ -322,12 +328,26 @@ io.on('connection', (socket: any) => {
         return;
       }
 
+      // Validate message content
+      if (messageType === 'TEXT' && (!text || text.trim().length === 0)) {
+        socket.emit('error', { message: 'Text is required for text messages' });
+        return;
+      }
+
+      if (messageType === 'VOICE' && !mediaUrl) {
+        socket.emit('error', { message: 'Media URL is required for voice messages' });
+        return;
+      }
+
       // Create message
       const message = await prisma.chatMessage.create({
         data: {
           roomId,
           senderId: socket.userId,
-          text: text.trim()
+          text: text?.trim() || null,
+          messageType: messageType as any,
+          mediaUrl: mediaUrl || null,
+          duration: duration || null
         },
         include: {
           sender: {

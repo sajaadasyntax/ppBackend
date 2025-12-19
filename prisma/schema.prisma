@@ -656,16 +656,25 @@ model ChatMembership {
 }
 
 model ChatMessage {
-  id        String   @id @default(uuid())
-  roomId    String
-  senderId  String
-  text      String
-  createdAt DateTime @default(now())
-  room      ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  id          String          @id @default(uuid())
+  roomId      String
+  senderId    String
+  text        String?         // Optional for voice/media messages
+  messageType MessageType     @default(TEXT)
+  mediaUrl    String?         // URL to voice/image file
+  duration    Int?            // Duration in seconds for voice messages
+  createdAt   DateTime        @default(now())
+  room        ChatRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender      User            @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([roomId, createdAt])
   @@index([senderId])
+}
+
+enum MessageType {
+  TEXT
+  VOICE
+  IMAGE
 }
 
 model Notification {
