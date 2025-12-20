@@ -9,8 +9,27 @@
  */
 
 import { PrismaClient, SectorType } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import dotenv from 'dotenv';
+import { resolve } from 'path';
 
-const prisma = new PrismaClient();
+// Load environment variables - ts-node needs explicit dotenv loading
+const envPath = resolve(process.cwd(), '.env');
+dotenv.config({ path: envPath });
+
+// Verify DATABASE_URL is loaded
+if (!process.env.DATABASE_URL) {
+  console.error('❌ Error: DATABASE_URL is not set in environment variables.');
+  console.error(`   Looking for .env file at: ${envPath}`);
+  console.error('   Please ensure .env file exists in the project root with DATABASE_URL set.');
+  process.exit(1);
+}
+
+// Prisma 7.x uses the adapter pattern for database connections
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 const FIXED_SECTOR_TYPES: SectorType[] = ['SOCIAL', 'ECONOMIC', 'ORGANIZATIONAL', 'POLITICAL'];
 
@@ -358,6 +377,7 @@ async function main() {
     throw error;
   } finally {
     await prisma.$disconnect();
+    await pool.end();
   }
 }
 
