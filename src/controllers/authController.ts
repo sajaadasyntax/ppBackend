@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../types';
 import * as userService from '../services/userService';
 import { normalizeMobileNumber } from '../utils/mobileNormalization';
 import { comparePassword } from '../utils/auth';
+import prisma from '../utils/prisma';
 
 // Register a new user
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -85,11 +86,36 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
     
-    // Find user by mobile number
+    // Find user by mobile number (normalized)
     let user = await userService.getUserByMobileNumber(normalizedMobile);
     
+    // If not found with normalized, try with original format (for existing users created before normalization fix)
+    if (!user && mobileNumber !== normalizedMobile) {
+      console.log('User not found with normalized mobile, trying original format');
+      user = await userService.getUserByMobileNumber(mobileNumber);
+      
+      // If found with original format, update to normalized format for future logins
+      if (user) {
+        console.log('Found user with original format, updating to normalized format');
+        await userService.updateUser(user.id, { mobileNumber: normalizedMobile });
+        // Also update in profile and memberDetails if they exist
+        if (user.profile) {
+          await prisma.profile.updateMany({
+            where: { userId: user.id },
+            data: { phoneNumber: normalizedMobile }
+          });
+        }
+        if (user.memberDetails) {
+          await prisma.memberDetails.updateMany({
+            where: { userId: user.id },
+            data: { mobile: normalizedMobile }
+          });
+        }
+      }
+    }
+    
     if (!user) {
-      console.log('User not found for mobile number');
+      console.log('User not found for mobile number (tried normalized and original)');
       res.status(401).json({ error: 'Invalid credentials' });
       return;
     }

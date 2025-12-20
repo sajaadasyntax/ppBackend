@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma';
 import { SectorType, AdminLevel } from '@prisma/client';
 import { hashPassword } from '../utils/auth';
+import { normalizeMobileNumber } from '../utils/mobileNormalization';
 
 // Fixed 4 sector types
 const FIXED_SECTOR_TYPES: SectorType[] = ['SOCIAL', 'ECONOMIC', 'ORGANIZATIONAL', 'POLITICAL'];
@@ -226,11 +227,19 @@ export async function createUserForExpatriateRegion(expatriateRegionId: string, 
     throw new Error('Password is required');
   }
   
-  // Check if user already exists
+  // Normalize mobile number to E.164 format (same as login)
+  let normalizedMobile: string;
+  try {
+    normalizedMobile = normalizeMobileNumber(userData.mobileNumber);
+  } catch (error: any) {
+    throw new Error(`Invalid mobile number format: ${error.message}`);
+  }
+  
+  // Check if user already exists (using normalized mobile number)
   const existingUser = await prisma.user.findFirst({
     where: {
       OR: [
-        { mobileNumber: userData.mobileNumber },
+        { mobileNumber: normalizedMobile },
         ...(userData.email ? [{ email: userData.email }] : [])
       ]
     }
@@ -257,10 +266,10 @@ export async function createUserForExpatriateRegion(expatriateRegionId: string, 
     (userData.firstName && userData.lastName ? `${userData.firstName} ${userData.lastName}` : 
      userData.firstName || userData.lastName || userData.mobileNumber);
   
-  // Create user with expatriate region assignment
+  // Create user with expatriate region assignment (using normalized mobile number)
   const user = await prisma.user.create({
     data: {
-      mobileNumber: userData.mobileNumber,
+      mobileNumber: normalizedMobile,
       password: hashedPassword,
       email: userData.email || null,
       role: 'USER',
@@ -270,13 +279,13 @@ export async function createUserForExpatriateRegion(expatriateRegionId: string, 
         create: {
           firstName: userData.firstName || '',
           lastName: userData.lastName || '',
-          phoneNumber: userData.mobileNumber
+          phoneNumber: normalizedMobile
         }
       },
       memberDetails: {
         create: {
           fullName,
-          mobile: userData.mobileNumber
+          mobile: normalizedMobile
         }
       }
     },
