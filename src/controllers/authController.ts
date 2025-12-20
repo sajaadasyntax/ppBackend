@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import * as userService from '../services/userService';
 import { normalizeMobileNumber } from '../utils/mobileNormalization';
+import { comparePassword } from '../utils/auth';
 
 // Register a new user
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -102,13 +103,22 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Check password
     try {
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      
-      if (!isPasswordValid) {
-        console.log('Invalid password for user:', user.email);
+      if (!user.password) {
+        console.log('User has no password set:', user.email || user.mobileNumber);
         res.status(401).json({ error: 'Invalid credentials' });
         return;
       }
+      
+      console.log('Comparing password for user:', user.email || user.mobileNumber, 'Password hash exists:', !!user.password);
+      const isPasswordValid = await comparePassword(password, user.password);
+      
+      if (!isPasswordValid) {
+        console.log('Password comparison failed for user:', user.email || user.mobileNumber);
+        res.status(401).json({ error: 'Invalid credentials' });
+        return;
+      }
+      
+      console.log('Password verified successfully');
     } catch (passwordError) {
       console.error('Password comparison error:', passwordError);
       res.status(500).json({ error: 'Error validating credentials' });
