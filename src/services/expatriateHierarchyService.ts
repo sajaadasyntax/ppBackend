@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma';
-import { SectorType } from '@prisma/client';
+import { SectorType, AdminLevel } from '@prisma/client';
 
 // Fixed 4 sector types
 const FIXED_SECTOR_TYPES: SectorType[] = ['SOCIAL', 'ECONOMIC', 'ORGANIZATIONAL', 'POLITICAL'];
@@ -264,7 +264,7 @@ export async function createUserForExpatriateRegion(expatriateRegionId: string, 
       password: hashedPassword,
       email: userData.email || null,
       role: 'USER',
-      adminLevel: userData.adminLevel || 'USER',
+      adminLevel: (userData.adminLevel || 'USER') as AdminLevel,
       expatriateRegionId,
       profile: {
         create: {
