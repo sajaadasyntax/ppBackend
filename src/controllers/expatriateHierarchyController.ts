@@ -111,3 +111,30 @@ export const assignUserToExpatriateRegion = async (req: AuthenticatedRequest, re
   }
 };
 
+/**
+ * Create user for expatriate region
+ */
+export const createUserForExpatriateRegion = async (req: AuthenticatedRequest, res: Response, next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userData = req.body;
+    
+    const user = await expatriateHierarchyService.createUserForExpatriateRegion(id, userData);
+    
+    res.status(201).json({
+      success: true,
+      data: user,
+      message: 'User created successfully'
+    });
+  } catch (error: any) {
+    if (error.message === 'Mobile number is required' || 
+        error.message === 'Password is required' ||
+        error.message === 'Expatriate region not found' ||
+        error.message.includes('already exists')) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    next ? next(error) : res.status(500).json({ error: 'Internal server error' });
+  }
+};
+

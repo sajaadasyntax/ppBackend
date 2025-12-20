@@ -204,6 +204,92 @@ export async function assignUserToExpatriateRegion(userId: string, expatriateReg
   });
 }
 
+/**
+ * Create user for expatriate region
+ */
+export async function createUserForExpatriateRegion(expatriateRegionId: string, userData: {
+  mobileNumber: string;
+  password: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  adminLevel?: string;
+}): Promise<any> {
+  // Validate mobile number
+  if (!userData.mobileNumber) {
+    throw new Error('Mobile number is required');
+  }
+  
+  if (!userData.password) {
+    throw new Error('Password is required');
+  }
+  
+  // Check if user already exists
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { mobileNumber: userData.mobileNumber },
+        ...(userData.email ? [{ email: userData.email }] : [])
+      ]
+    }
+  });
+  
+  if (existingUser) {
+    throw new Error('A user with this mobile number or email already exists');
+  }
+  
+  // Verify expatriate region exists
+  const region = await prisma.expatriateRegion.findUnique({
+    where: { id: expatriateRegionId }
+  });
+  
+  if (!region) {
+    throw new Error('Expatriate region not found');
+  }
+  
+  // Hash password
+  const bcrypt = require('bcryptjs');
+  const hashedPassword = await bcrypt.hash(userData.password, 10);
+  
+  // Determine the full name
+  const fullName = userData.fullName || 
+    (userData.firstName && userData.lastName ? `${userData.firstName} ${userData.lastName}` : 
+     userData.firstName || userData.lastName || userData.mobileNumber);
+  
+  // Create user with expatriate region assignment
+  const user = await prisma.user.create({
+    data: {
+      mobileNumber: userData.mobileNumber,
+      password: hashedPassword,
+      email: userData.email || null,
+      role: 'USER',
+      adminLevel: userData.adminLevel || 'USER',
+      expatriateRegionId,
+      profile: {
+        create: {
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          phoneNumber: userData.mobileNumber
+        }
+      },
+      memberDetails: {
+        create: {
+          fullName,
+          mobile: userData.mobileNumber
+        }
+      }
+    },
+    include: {
+      profile: true,
+      memberDetails: true,
+      expatriateRegion: true
+    }
+  });
+  
+  return user;
+}
+
 export default {
   getAllExpatriateRegions,
   getExpatriateRegionById,
@@ -211,6 +297,7 @@ export default {
   updateExpatriateRegion,
   deleteExpatriateRegion,
   getUsersByExpatriateRegion,
-  assignUserToExpatriateRegion
+  assignUserToExpatriateRegion,
+  createUserForExpatriateRegion
 };
 

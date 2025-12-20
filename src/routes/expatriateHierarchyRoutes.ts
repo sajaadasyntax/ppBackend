@@ -20,6 +20,7 @@ router.delete('/expatriate-regions/:id', adminOnly, expatriateHierarchyControlle
 
 // User management routes - allow expatriate admins to manage users in their regions
 router.get('/expatriate-regions/:id/users', expatriateAdmins, expatriateHierarchyController.getUsersByExpatriateRegion);
+router.post('/expatriate-regions/:id/users', expatriateAdmins, expatriateHierarchyController.createUserForExpatriateRegion);
 router.put('/users/:userId/expatriate-region', expatriateAdmins, expatriateHierarchyController.assignUserToExpatriateRegion);
 
 export default router;
