@@ -15,7 +15,9 @@ export async function createUser(userData: any): Promise<any> {
     regionId,
     localityId,
     adminUnitId,
-    districtId 
+    districtId,
+    expatriateRegionId,
+    activeHierarchy
   } = userData;
 
   // Hash the password
@@ -63,7 +65,7 @@ export async function createUser(userData: any): Promise<any> {
       throw new Error('Mobile number already in use');
     }
 
-    // IMPORTANT: Users MUST exist at district level (except root admins)
+    // IMPORTANT: Users MUST exist at district level (except root admins and expatriate users)
     // If districtId is provided, auto-derive parent hierarchy IDs
     let finalRegionId = regionId;
     let finalLocalityId = localityId;
@@ -71,12 +73,14 @@ export async function createUser(userData: any): Promise<any> {
     let finalDistrictId = districtId;
 
     // Root admins (GENERAL_SECRETARIAT, ADMIN) don't need district
+    // Expatriate users also don't need district (they use expatriateRegionId)
     const isRootAdmin = resolvedAdminLevel === 'GENERAL_SECRETARIAT' || resolvedAdminLevel === 'ADMIN' || role === 'ADMIN';
+    const isExpatriateUser = expatriateRegionId && activeHierarchy === 'EXPATRIATE';
     
-    if (!isRootAdmin) {
-      // For all other users, districtId is REQUIRED
+    if (!isRootAdmin && !isExpatriateUser) {
+      // For all other users (original hierarchy), districtId is REQUIRED
       if (!districtId) {
-        throw new Error('District ID is required for all users (except root admins)');
+        throw new Error('District ID is required for all users (except root admins and expatriate users)');
       }
 
       // Fetch district and auto-derive parent hierarchy IDs
@@ -106,6 +110,18 @@ export async function createUser(userData: any): Promise<any> {
       finalRegionId = district.adminUnit.locality.regionId;
     }
 
+    // Determine activeHierarchy - use provided value or default based on what's set
+    let finalActiveHierarchy = activeHierarchy;
+    if (!finalActiveHierarchy) {
+      if (expatriateRegionId) {
+        finalActiveHierarchy = 'EXPATRIATE';
+      } else if (finalDistrictId || finalAdminUnitId || finalLocalityId || finalRegionId) {
+        finalActiveHierarchy = 'ORIGINAL';
+      } else {
+        finalActiveHierarchy = 'ORIGINAL'; // Default
+      }
+    }
+
     // Create the user
     const user = await tx.user.create({
       data: {
@@ -114,12 +130,14 @@ export async function createUser(userData: any): Promise<any> {
         role: role || 'USER', // For backward compatibility
         adminLevel: resolvedAdminLevel,
         mobileNumber: normalizedMobile,
+        activeHierarchy: finalActiveHierarchy,
         
         // Use auto-derived hierarchy IDs
         regionId: finalRegionId || undefined,
         localityId: finalLocalityId || undefined,
         adminUnitId: finalAdminUnitId || undefined,
         districtId: finalDistrictId || undefined,
+        expatriateRegionId: expatriateRegionId || undefined,
         
         profile: profile ? {
           create: {
@@ -182,7 +200,8 @@ export async function createUser(userData: any): Promise<any> {
         region: true,
         locality: true,
         adminUnit: true,
-        district: true
+        district: true,
+        expatriateRegion: true
       }
     });
 

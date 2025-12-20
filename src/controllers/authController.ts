@@ -95,15 +95,19 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       token, 
       user: { 
         id: user.id, 
-        name: user.name, 
-        email: user.email, 
+        email: user.email,
+        mobileNumber: user.mobileNumber,
         role: user.role,
         adminLevel: user.adminLevel || 'USER',
+        activeHierarchy: user.activeHierarchy || 'ORIGINAL',
         nationalLevelId: user.nationalLevelId || null,
         regionId: user.regionId || null,
         localityId: user.localityId || null,
         adminUnitId: user.adminUnitId || null,
-        districtId: user.districtId || null
+        districtId: user.districtId || null,
+        expatriateRegionId: user.expatriateRegionId || null,
+        profile: user.profile,
+        memberDetails: user.memberDetails
       } 
     });
   } catch (error) {
