@@ -11,7 +11,6 @@ import prisma from '../utils/prisma';
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { 
-      name, 
       email, 
       password, 
       phone, 
