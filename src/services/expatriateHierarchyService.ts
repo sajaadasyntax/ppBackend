@@ -1,5 +1,6 @@
 import prisma from '../utils/prisma';
 import { SectorType, AdminLevel } from '@prisma/client';
+import { hashPassword } from '../utils/auth';
 
 // Fixed 4 sector types
 const FIXED_SECTOR_TYPES: SectorType[] = ['SOCIAL', 'ECONOMIC', 'ORGANIZATIONAL', 'POLITICAL'];
@@ -249,8 +250,7 @@ export async function createUserForExpatriateRegion(expatriateRegionId: string, 
   }
   
   // Hash password
-  const bcrypt = require('bcryptjs');
-  const hashedPassword = await bcrypt.hash(userData.password, 10);
+  const hashedPassword = await hashPassword(userData.password);
   
   // Determine the full name
   const fullName = userData.fullName || 
