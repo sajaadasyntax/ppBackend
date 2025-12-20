@@ -9,10 +9,17 @@ export const getAllSectorNationalLevels = async (req: AuthenticatedRequest, res:
     const { expatriateRegionId, originalOnly, expatriateOnly } = req.query;
     const isOriginalOnly = originalOnly === 'true';
     const isExpatriateOnly = expatriateOnly === 'true';
-    const levels = await sectorHierarchyService.getAllSectorNationalLevels(expatriateRegionId as string, isOriginalOnly, isExpatriateOnly);
+    
+    // Convert expatriateRegionId to string or null
+    const expatriateRegionIdValue = expatriateRegionId && typeof expatriateRegionId === 'string' && expatriateRegionId.trim() !== '' 
+      ? expatriateRegionId.trim() 
+      : null;
+    
+    const levels = await sectorHierarchyService.getAllSectorNationalLevels(expatriateRegionIdValue, isOriginalOnly, isExpatriateOnly);
     res.json(levels);
   } catch (error: any) {
-    next ? next(error) : res.status(500).json({ error: 'Internal server error' });
+    console.error('Error in getAllSectorNationalLevels:', error);
+    next ? next(error) : res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 };
 

@@ -4,15 +4,20 @@ import prisma from '../utils/prisma';
 
 export async function getAllSectorNationalLevels(expatriateRegionId: string | null = null, originalOnly: boolean = false, expatriateOnly: boolean = false): Promise<any[]> {
   const where: any = { active: true };
+  
+  // Normalize expatriateRegionId - convert empty strings to null
+  const normalizedExpatriateRegionId = expatriateRegionId && expatriateRegionId.trim() !== '' ? expatriateRegionId.trim() : null;
+  
   if (originalOnly) {
     // Original hierarchy sectors have no expatriateRegionId
     where.expatriateRegionId = null;
   } else if (expatriateOnly) {
     // Expatriate hierarchy sectors have expatriateRegionId set (not null)
     where.expatriateRegionId = { not: null };
-  } else if (expatriateRegionId) {
-    where.expatriateRegionId = expatriateRegionId;
+  } else if (normalizedExpatriateRegionId) {
+    where.expatriateRegionId = normalizedExpatriateRegionId;
   }
+  // If none of the conditions match, where.expatriateRegionId is not set, so it will return all active sectors
   
   return await prisma.sectorNationalLevel.findMany({
     where,

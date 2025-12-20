@@ -10,17 +10,70 @@ import prisma from '../utils/prisma';
 // Register a new user
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password, phone } = req.body;
+    const { 
+      name, 
+      email, 
+      password, 
+      phone, 
+      mobileNumber,
+      firstName,
+      lastName,
+      fullName,
+      regionId,
+      localityId,
+      adminUnitId,
+      districtId,
+      expatriateRegionId,
+      activeHierarchy
+    } = req.body;
     
-    // Check if user already exists
-    const existingUser = await userService.getUserByEmail(email);
-    if (existingUser) {
-      res.status(400).json({ error: 'Email already in use' });
+    // Use mobileNumber if provided, otherwise fall back to phone
+    const userMobileNumber = mobileNumber || phone;
+    
+    if (!userMobileNumber) {
+      res.status(400).json({ error: 'Mobile number is required' });
       return;
     }
     
+    // Check if user already exists by email (if provided)
+    if (email) {
+      const existingUser = await userService.getUserByEmail(email);
+      if (existingUser) {
+        res.status(400).json({ error: 'Email already in use' });
+        return;
+      }
+    }
+    
+    // Build user data object
+    const userData: any = {
+      email,
+      password,
+      mobileNumber: userMobileNumber,
+      regionId,
+      localityId,
+      adminUnitId,
+      districtId,
+      expatriateRegionId,
+      activeHierarchy
+    };
+    
+    // Add profile data if provided
+    if (firstName || lastName || fullName) {
+      userData.profile = {
+        firstName: firstName || '',
+        lastName: lastName || '',
+      };
+    }
+    
+    // Add memberDetails if fullName is provided
+    if (fullName) {
+      userData.memberDetails = {
+        fullName: fullName
+      };
+    }
+    
     // Create new user
-    const user = await userService.createUser({ name, email, password, phone });
+    const user = await userService.createUser(userData);
     
     // Generate JWT token with hierarchy information
     const token = jwt.sign(
