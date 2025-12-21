@@ -16,7 +16,7 @@ export const getAllSectorNationalLevels = async (req: AuthenticatedRequest, res:
       : null;
     
     const levels = await sectorHierarchyService.getAllSectorNationalLevels(expatriateRegionIdValue, isOriginalOnly, isExpatriateOnly);
-    res.json(levels);
+    res.json({ success: true, data: levels });
   } catch (error: any) {
     console.error('Error in getAllSectorNationalLevels:', error);
     next ? next(error) : res.status(500).json({ error: 'Internal server error', details: error.message });
@@ -93,7 +93,7 @@ export const getAllSectorRegions = async (req: AuthenticatedRequest, res: Respon
       isOriginalOnly,
       isExpatriateOnly
     );
-    res.json(regions);
+    res.json({ success: true, data: regions });
   } catch (error: any) {
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
@@ -165,7 +165,7 @@ export const getAllSectorLocalities = async (req: AuthenticatedRequest, res: Res
       isOriginalOnly,
       isExpatriateOnly
     );
-    res.json(localities);
+    res.json({ success: true, data: localities });
   } catch (error: any) {
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
@@ -237,7 +237,7 @@ export const getAllSectorAdminUnits = async (req: AuthenticatedRequest, res: Res
       isOriginalOnly,
       isExpatriateOnly
     );
-    res.json(adminUnits);
+    res.json({ success: true, data: adminUnits });
   } catch (error: any) {
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
@@ -309,7 +309,7 @@ export const getAllSectorDistricts = async (req: AuthenticatedRequest, res: Resp
       isOriginalOnly,
       isExpatriateOnly
     );
-    res.json(districts);
+    res.json({ success: true, data: districts });
   } catch (error: any) {
     next ? next(error) : res.status(500).json({ error: 'Internal server error' });
   }
