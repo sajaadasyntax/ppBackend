@@ -711,201 +711,144 @@ export async function getSectorMembers(sectorId: string, level: SectorLevelType)
   });
 }
 
-// Get available users that can be added to a sector (users at the same geographic level)
-export async function getAvailableUsersForSector(_sectorId: string, level: SectorLevelType, adminUser: any = null): Promise<any[]> {
+// Get available users that can be added to a sector
+// Fetches ALL users from the hierarchy level AND all sub-children
+export async function getAvailableUsersForSector(sectorId: string, level: SectorLevelType, adminUser: any = null): Promise<any[]> {
   const idField = sectorIdFields[level];
   
-  // Build where clause to filter users by geographic scope
+  // First, get the sector to extract the hierarchy entity ID from description
+  let hierarchyEntityId: string | null = null;
+  
+  try {
+    switch (level) {
+      case 'region': {
+        const sector = await prisma.sectorRegion.findUnique({ where: { id: sectorId } });
+        if (sector?.description) {
+          const match = sector.description.match(/SOURCE:region:([a-f0-9-]+)/i);
+          hierarchyEntityId = match ? match[1] : null;
+        }
+        break;
+      }
+      case 'locality': {
+        const sector = await prisma.sectorLocality.findUnique({ where: { id: sectorId } });
+        if (sector?.description) {
+          const match = sector.description.match(/SOURCE:locality:([a-f0-9-]+)/i);
+          hierarchyEntityId = match ? match[1] : null;
+        }
+        break;
+      }
+      case 'adminUnit': {
+        const sector = await prisma.sectorAdminUnit.findUnique({ where: { id: sectorId } });
+        if (sector?.description) {
+          const match = sector.description.match(/SOURCE:adminUnit:([a-f0-9-]+)/i);
+          hierarchyEntityId = match ? match[1] : null;
+        }
+        break;
+      }
+      case 'district': {
+        const sector = await prisma.sectorDistrict.findUnique({ where: { id: sectorId } });
+        if (sector?.description) {
+          const match = sector.description.match(/SOURCE:district:([a-f0-9-]+)/i);
+          hierarchyEntityId = match ? match[1] : null;
+        }
+        break;
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting hierarchy entity ID from sector:', error);
+  }
+
+  // Build where clause - get users NOT already in this sector
   const whereClause: any = {
-    [idField]: null // Users not assigned to any sector at this level
+    [idField]: null // Users not already assigned to this sector type
   };
 
-  // Apply geographic scope filtering based on admin's hierarchy level
+  // If we have a hierarchy entity ID, get all users from that entity and its sub-children
+  if (hierarchyEntityId) {
+    let districtIds: string[] = [];
+    
+    switch (level) {
+      case 'region': {
+        // Get all districts under all localities in this region
+        const localities = await prisma.locality.findMany({
+          where: { regionId: hierarchyEntityId },
+          select: { id: true }
+        });
+        const localityIds = localities.map(l => l.id);
+        
+        const adminUnits = await prisma.adminUnit.findMany({
+          where: { localityId: { in: localityIds } },
+          select: { id: true }
+        });
+        const adminUnitIds = adminUnits.map(au => au.id);
+        
+        const districts = await prisma.district.findMany({
+          where: { adminUnitId: { in: adminUnitIds } },
+          select: { id: true }
+        });
+        districtIds = districts.map(d => d.id);
+        break;
+      }
+      case 'locality': {
+        // Get all districts under all admin units in this locality
+        const adminUnits = await prisma.adminUnit.findMany({
+          where: { localityId: hierarchyEntityId },
+          select: { id: true }
+        });
+        const adminUnitIds = adminUnits.map(au => au.id);
+        
+        const districts = await prisma.district.findMany({
+          where: { adminUnitId: { in: adminUnitIds } },
+          select: { id: true }
+        });
+        districtIds = districts.map(d => d.id);
+        break;
+      }
+      case 'adminUnit': {
+        // Get all districts under this admin unit
+        const districts = await prisma.district.findMany({
+          where: { adminUnitId: hierarchyEntityId },
+          select: { id: true }
+        });
+        districtIds = districts.map(d => d.id);
+        break;
+      }
+      case 'district': {
+        // Just this district
+        districtIds = [hierarchyEntityId];
+        break;
+      }
+    }
+    
+    // Add district filter if we have district IDs
+    if (districtIds.length > 0) {
+      whereClause.districtId = { in: districtIds };
+    }
+  }
+
+  // Apply additional admin scope filtering if needed
   if (adminUser) {
     const { adminLevel, regionId, localityId, adminUnitId, districtId, nationalLevelId } = adminUser;
 
     // Full access admins can see all users
-    if (adminLevel === 'ADMIN' || adminLevel === 'GENERAL_SECRETARIAT') {
-      // No additional filtering needed
-    } else {
-      // Filter users based on the sector level and admin's scope
-      switch (level) {
-        case 'region':
-          // For region-level sectors, filter by admin's region scope
-          if (adminLevel === 'NATIONAL_LEVEL' && nationalLevelId) {
-            // National level admin: filter users by regions in their national level
-            whereClause.region = {
-              nationalLevelId: nationalLevelId
-            };
-          } else if (adminLevel === 'REGION' && regionId) {
-            // Region admin: only users in their region
-            whereClause.regionId = regionId;
-          } else if (regionId) {
-            // Other admins: only users in their region
-            whereClause.regionId = regionId;
-          } else {
-            // No regionId means no access - return empty array
-            return [];
-          }
-          break;
-
-        case 'locality':
-          // For locality-level sectors, filter by admin's locality scope
-          if (adminLevel === 'NATIONAL_LEVEL' && nationalLevelId) {
-            // National level admin: filter users by localities in regions of their national level
-            whereClause.locality = {
-              region: {
-                nationalLevelId: nationalLevelId
-              }
-            };
-          } else if (adminLevel === 'REGION' && regionId) {
-            // Region admin: users in localities within their region
-            whereClause.locality = {
-              regionId: regionId
-            };
-          } else if (adminLevel === 'LOCALITY' && localityId) {
-            // Locality admin: only users in their locality
-            whereClause.localityId = localityId;
-          } else if (localityId) {
-            whereClause.localityId = localityId;
-          } else if (regionId) {
-            // Fallback to region if no localityId
-            whereClause.locality = {
-              regionId: regionId
-            };
-          } else {
-            // No access - return empty array
-            return [];
-          }
-          break;
-
-        case 'adminUnit':
-          // For admin unit-level sectors, filter by admin's admin unit scope
-          if (adminLevel === 'NATIONAL_LEVEL' && nationalLevelId) {
-            // National level admin: filter users by admin units in their national level
-            whereClause.adminUnit = {
-              locality: {
-                region: {
-                  nationalLevelId: nationalLevelId
-                }
-              }
-            };
-          } else if (adminLevel === 'REGION' && regionId) {
-            // Region admin: users in admin units within their region
-            whereClause.adminUnit = {
-              locality: {
-                regionId: regionId
-              }
-            };
-          } else if (adminLevel === 'LOCALITY' && localityId) {
-            // Locality admin: users in admin units within their locality
-            whereClause.adminUnit = {
-              localityId: localityId
-            };
-          } else if (adminLevel === 'ADMIN_UNIT' && adminUnitId) {
-            // Admin unit admin: only users in their admin unit
-            whereClause.adminUnitId = adminUnitId;
-          } else if (adminUnitId) {
-            whereClause.adminUnitId = adminUnitId;
-          } else if (localityId) {
-            whereClause.adminUnit = {
-              localityId: localityId
-            };
-          } else if (regionId) {
-            whereClause.adminUnit = {
-              locality: {
-                regionId: regionId
-              }
-            };
-          } else {
-            // No access - return empty array
-            return [];
-          }
-          break;
-
-        case 'district':
-          // For district-level sectors, filter by admin's district scope
-          if (adminLevel === 'NATIONAL_LEVEL' && nationalLevelId) {
-            // National level admin: filter users by districts in their national level
-            whereClause.district = {
-              adminUnit: {
-                locality: {
-                  region: {
-                    nationalLevelId: nationalLevelId
-                  }
-                }
-              }
-            };
-          } else if (adminLevel === 'REGION' && regionId) {
-            // Region admin: users in districts within their region
-            whereClause.district = {
-              adminUnit: {
-                locality: {
-                  regionId: regionId
-                }
-              }
-            };
-          } else if (adminLevel === 'LOCALITY' && localityId) {
-            // Locality admin: users in districts within their locality
-            whereClause.district = {
-              adminUnit: {
-                localityId: localityId
-              }
-            };
-          } else if (adminLevel === 'ADMIN_UNIT' && adminUnitId) {
-            // Admin unit admin: users in districts within their admin unit
-            whereClause.district = {
-              adminUnitId: adminUnitId
-            };
-          } else if (adminLevel === 'DISTRICT' && districtId) {
-            // District admin: only users in their district
-            whereClause.districtId = districtId;
-          } else if (districtId) {
-            whereClause.districtId = districtId;
-          } else if (adminUnitId) {
-            whereClause.district = {
-              adminUnitId: adminUnitId
-            };
-          } else if (localityId) {
-            whereClause.district = {
-              adminUnit: {
-                localityId: localityId
-              }
-            };
-          } else if (regionId) {
-            whereClause.district = {
-              adminUnit: {
-                locality: {
-                  regionId: regionId
-                }
-              }
-            };
-          } else {
-            // No access - return empty array
-            return [];
-          }
-          break;
-
-        case 'national':
-          // For national-level sectors, filter by admin's national level scope
-          if (adminLevel === 'NATIONAL_LEVEL' && nationalLevelId) {
-            // National level admin: users in regions of their national level
-            whereClause.region = {
-              nationalLevelId: nationalLevelId
-            };
-          } else if (adminLevel === 'ADMIN' || adminLevel === 'GENERAL_SECRETARIAT') {
-            // Full access admins can see all users
-            // No additional filtering
-          } else {
-            // Other admins shouldn't see national level users - return empty array
-            return [];
-          }
-          break;
+    if (adminLevel !== 'ADMIN' && adminLevel !== 'GENERAL_SECRETARIAT') {
+      // Additional scope restriction for hierarchical admins
+      // This is already partially handled by the hierarchy entity filter above
+      // But we can add additional restrictions based on admin's own scope
+      
+      if (adminLevel === 'NATIONAL_LEVEL' && nationalLevelId && !hierarchyEntityId) {
+        // Fallback: filter by national level if no hierarchy entity
+        whereClause.region = { nationalLevelId: nationalLevelId };
+      } else if (adminLevel === 'REGION' && regionId && !hierarchyEntityId) {
+        whereClause.regionId = regionId;
+      } else if (adminLevel === 'LOCALITY' && localityId && !hierarchyEntityId) {
+        whereClause.localityId = localityId;
+      } else if (adminLevel === 'ADMIN_UNIT' && adminUnitId && !hierarchyEntityId) {
+        whereClause.adminUnitId = adminUnitId;
+      } else if (adminLevel === 'DISTRICT' && districtId && !hierarchyEntityId) {
+        whereClause.districtId = districtId;
       }
     }
-  } else {
-    // No admin user means no access - return empty array
-    return [];
   }
   
   // Get users that match the criteria
