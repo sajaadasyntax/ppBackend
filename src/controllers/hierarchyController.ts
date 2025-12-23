@@ -661,7 +661,46 @@ export const getRegions = async (req: AuthenticatedRequest, res: Response, _next
       console.log('📋 Region names:', regions.map(r => r.name).join(', '));
     }
     
-    res.json(regions);
+    // Calculate total users including sub-children for each region
+    const regionsWithTotalUsers = await Promise.all(
+      regions.map(async (region) => {
+        // Get all locality IDs in this region
+        const localities = await prisma.locality.findMany({
+          where: { regionId: region.id },
+          select: { id: true }
+        });
+        const localityIds = localities.map(l => l.id);
+        
+        // Get all admin unit IDs under those localities
+        const adminUnits = await prisma.adminUnit.findMany({
+          where: { localityId: { in: localityIds } },
+          select: { id: true }
+        });
+        const adminUnitIds = adminUnits.map(au => au.id);
+        
+        // Get all district IDs under those admin units
+        const districts = await prisma.district.findMany({
+          where: { adminUnitId: { in: adminUnitIds } },
+          select: { id: true }
+        });
+        const districtIds = districts.map(d => d.id);
+        
+        // Count all users in those districts
+        const totalUsersInDistricts = districtIds.length > 0 
+          ? await prisma.user.count({ where: { districtId: { in: districtIds } } })
+          : 0;
+        
+        return {
+          ...region,
+          _count: {
+            ...region._count,
+            users: totalUsersInDistricts
+          }
+        };
+      })
+    );
+    
+    res.json(regionsWithTotalUsers);
   } catch (error: any) {
     console.error('❌ Error getting regions:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1101,7 +1140,39 @@ export const getLocalitiesByRegion = async (req: AuthenticatedRequest, res: Resp
       orderBy: { name: 'asc' }
     });
     
-    res.json(localities);
+    // Calculate total users including sub-children for each locality
+    const localitiesWithTotalUsers = await Promise.all(
+      localities.map(async (locality) => {
+        // Get all admin unit IDs in this locality
+        const adminUnits = await prisma.adminUnit.findMany({
+          where: { localityId: locality.id },
+          select: { id: true }
+        });
+        const adminUnitIds = adminUnits.map(au => au.id);
+        
+        // Get all district IDs under those admin units
+        const districts = await prisma.district.findMany({
+          where: { adminUnitId: { in: adminUnitIds } },
+          select: { id: true }
+        });
+        const districtIds = districts.map(d => d.id);
+        
+        // Count all users in those districts
+        const totalUsersInDistricts = districtIds.length > 0 
+          ? await prisma.user.count({ where: { districtId: { in: districtIds } } })
+          : 0;
+        
+        return {
+          ...locality,
+          _count: {
+            ...locality._count,
+            users: totalUsersInDistricts
+          }
+        };
+      })
+    );
+    
+    res.json(localitiesWithTotalUsers);
   } catch (error: any) {
     console.error('Error getting localities:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -1407,7 +1478,32 @@ export const getAdminUnitsByLocality = async (req: AuthenticatedRequest, res: Re
       orderBy: { name: 'asc' }
     });
     
-    res.json(adminUnits);
+    // Calculate total users including sub-children (districts) for each admin unit
+    const adminUnitsWithTotalUsers = await Promise.all(
+      adminUnits.map(async (adminUnit) => {
+        // Get all district IDs under this admin unit
+        const districts = await prisma.district.findMany({
+          where: { adminUnitId: adminUnit.id },
+          select: { id: true }
+        });
+        const districtIds = districts.map(d => d.id);
+        
+        // Count all users in those districts
+        const totalUsersInDistricts = districtIds.length > 0 
+          ? await prisma.user.count({ where: { districtId: { in: districtIds } } })
+          : 0;
+        
+        return {
+          ...adminUnit,
+          _count: {
+            ...adminUnit._count,
+            users: totalUsersInDistricts
+          }
+        };
+      })
+    );
+    
+    res.json(adminUnitsWithTotalUsers);
   } catch (error: any) {
     console.error('Error getting admin units:', error);
     res.status(500).json({ error: 'Internal server error' });
