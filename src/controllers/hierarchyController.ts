@@ -866,10 +866,41 @@ export const updateRegion = async (req: AuthenticatedRequest, res: Response, _ne
     if (active !== undefined) updateData.active = active;
     if (nationalLevelId !== undefined) updateData.nationalLevelId = nationalLevelId;
     
+    // Get the current region to check if admin is changing
+    const currentRegion = await prisma.region.findUnique({
+      where: { id },
+      select: { adminId: true }
+    });
+    
     const region = await prisma.region.update({
       where: { id },
       data: updateData
     });
+    
+    // If admin is being assigned, update their role and adminLevel
+    if (adminId !== undefined && adminId !== null && adminId !== currentRegion?.adminId) {
+      await prisma.user.update({
+        where: { id: adminId },
+        data: {
+          role: 'ADMIN',
+          adminLevel: 'REGION',
+          regionId: id
+        }
+      });
+      console.log(`Updated user ${adminId} to ADMIN role with REGION adminLevel`);
+    }
+    
+    // If admin is being removed, revert their role (only if they were the admin of this region)
+    if (adminId === null && currentRegion?.adminId) {
+      await prisma.user.update({
+        where: { id: currentRegion.adminId },
+        data: {
+          role: 'USER',
+          adminLevel: 'USER'
+        }
+      });
+      console.log(`Reverted user ${currentRegion.adminId} to USER role`);
+    }
     
     res.json(region);
   } catch (error: any) {
@@ -1323,6 +1354,12 @@ export const updateLocality = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
     
+    // Get the current locality to check if admin is changing
+    const currentLocality = await prisma.locality.findUnique({
+      where: { id },
+      select: { adminId: true, regionId: true }
+    });
+    
     const locality = await prisma.locality.update({
       where: { id },
       data: {
@@ -1334,6 +1371,32 @@ export const updateLocality = async (req: AuthenticatedRequest, res: Response, _
         active: active !== undefined ? active : undefined
       }
     });
+    
+    // If admin is being assigned, update their role and adminLevel
+    if (adminId !== undefined && adminId !== null && adminId !== currentLocality?.adminId) {
+      await prisma.user.update({
+        where: { id: adminId },
+        data: {
+          role: 'ADMIN',
+          adminLevel: 'LOCALITY',
+          regionId: currentLocality?.regionId || locality.regionId,
+          localityId: id
+        }
+      });
+      console.log(`Updated user ${adminId} to ADMIN role with LOCALITY adminLevel`);
+    }
+    
+    // If admin is being removed, revert their role
+    if (adminId === null && currentLocality?.adminId) {
+      await prisma.user.update({
+        where: { id: currentLocality.adminId },
+        data: {
+          role: 'USER',
+          adminLevel: 'USER'
+        }
+      });
+      console.log(`Reverted user ${currentLocality.adminId} to USER role`);
+    }
     
     res.json(locality);
   } catch (error: any) {
@@ -1658,6 +1721,12 @@ export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, 
       return;
     }
     
+    // Get the current admin unit to check if admin is changing
+    const currentAdminUnit = await prisma.adminUnit.findUnique({
+      where: { id },
+      select: { adminId: true, localityId: true, locality: { select: { regionId: true } } }
+    });
+    
     const adminUnit = await prisma.adminUnit.update({
       where: { id },
       data: {
@@ -1669,6 +1738,33 @@ export const updateAdminUnit = async (req: AuthenticatedRequest, res: Response, 
         active: active !== undefined ? active : undefined
       }
     });
+    
+    // If admin is being assigned, update their role and adminLevel
+    if (adminId !== undefined && adminId !== null && adminId !== currentAdminUnit?.adminId) {
+      await prisma.user.update({
+        where: { id: adminId },
+        data: {
+          role: 'ADMIN',
+          adminLevel: 'ADMIN_UNIT',
+          regionId: currentAdminUnit?.locality?.regionId,
+          localityId: currentAdminUnit?.localityId || adminUnit.localityId,
+          adminUnitId: id
+        }
+      });
+      console.log(`Updated user ${adminId} to ADMIN role with ADMIN_UNIT adminLevel`);
+    }
+    
+    // If admin is being removed, revert their role
+    if (adminId === null && currentAdminUnit?.adminId) {
+      await prisma.user.update({
+        where: { id: currentAdminUnit.adminId },
+        data: {
+          role: 'USER',
+          adminLevel: 'USER'
+        }
+      });
+      console.log(`Reverted user ${currentAdminUnit.adminId} to USER role`);
+    }
     
     res.json(adminUnit);
   } catch (error: any) {
@@ -2004,6 +2100,21 @@ export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _
       return;
     }
     
+    // Get the current district to check if admin is changing
+    const currentDistrict = await prisma.district.findUnique({
+      where: { id },
+      select: { 
+        adminId: true, 
+        adminUnitId: true, 
+        adminUnit: { 
+          select: { 
+            localityId: true, 
+            locality: { select: { regionId: true } } 
+          } 
+        } 
+      }
+    });
+    
     const district = await prisma.district.update({
       where: { id },
       data: {
@@ -2015,6 +2126,34 @@ export const updateDistrict = async (req: AuthenticatedRequest, res: Response, _
         active: active !== undefined ? active : undefined
       }
     });
+    
+    // If admin is being assigned, update their role and adminLevel
+    if (adminId !== undefined && adminId !== null && adminId !== currentDistrict?.adminId) {
+      await prisma.user.update({
+        where: { id: adminId },
+        data: {
+          role: 'ADMIN',
+          adminLevel: 'DISTRICT',
+          regionId: currentDistrict?.adminUnit?.locality?.regionId,
+          localityId: currentDistrict?.adminUnit?.localityId,
+          adminUnitId: currentDistrict?.adminUnitId || district.adminUnitId,
+          districtId: id
+        }
+      });
+      console.log(`Updated user ${adminId} to ADMIN role with DISTRICT adminLevel`);
+    }
+    
+    // If admin is being removed, revert their role
+    if (adminId === null && currentDistrict?.adminId) {
+      await prisma.user.update({
+        where: { id: currentDistrict.adminId },
+        data: {
+          role: 'USER',
+          adminLevel: 'USER'
+        }
+      });
+      console.log(`Reverted user ${currentDistrict.adminId} to USER role`);
+    }
     
     res.json(district);
   } catch (error: any) {
