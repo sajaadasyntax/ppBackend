@@ -108,27 +108,94 @@ model District {
   votingItems VotingItem[]
 }
 
+// ==================== EXPATRIATE HIERARCHY ====================
+// Mirrors the geographic hierarchy structure for expatriate management
+
+model ExpatriateNationalLevel {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  code        String?             @unique
+  description String?
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  adminId     String?
+  admin       User?               @relation("ExpatriateNationalLevelAdmin", fields: [adminId], references: [id])
+  regions     ExpatriateRegion[]
+  users       User[]
+}
+
 model ExpatriateRegion {
+  id                        String                    @id @default(uuid())
+  name                      String                    @unique
+  code                      String?                   @unique
+  description               String?
+  active                    Boolean                   @default(true)
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  adminId                   String?
+  expatriateNationalLevelId String?
+  bulletins                 Bulletin[]                @relation("ExpatriateRegionBulletins")
+  admin                     User?                     @relation("ExpatriateRegionAdmin", fields: [adminId], references: [id])
+  expatriateNationalLevel   ExpatriateNationalLevel?  @relation(fields: [expatriateNationalLevelId], references: [id])
+  localities                ExpatriateLocality[]
+  reports                   Report[]                  @relation("ExpatriateRegionReports")
+  sectorAdminUnits          SectorAdminUnit[]
+  sectorDistricts           SectorDistrict[]
+  sectorLocalities          SectorLocality[]
+  sectorNationalLevels      SectorNationalLevel[]
+  sectorRegions             SectorRegion[]
+  plans                     SubscriptionPlan[]        @relation("ExpatriateRegionPlans")
+  surveys                   Survey[]                  @relation("ExpatriateRegionSurveys")
+  users                     User[]
+  votingItems               VotingItem[]              @relation("ExpatriateRegionVotingItems")
+}
+
+model ExpatriateLocality {
   id                   String                @id @default(uuid())
-  name                 String                @unique
+  name                 String
   code                 String?               @unique
   description          String?
   active               Boolean               @default(true)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+  expatriateRegionId   String
   adminId              String?
-  bulletins            Bulletin[]            @relation("ExpatriateRegionBulletins")
-  admin                User?                 @relation("ExpatriateRegionAdmin", fields: [adminId], references: [id])
-  reports              Report[]              @relation("ExpatriateRegionReports")
-  sectorAdminUnits     SectorAdminUnit[]
-  sectorDistricts      SectorDistrict[]
-  sectorLocalities     SectorLocality[]
-  sectorNationalLevels SectorNationalLevel[]
-  sectorRegions        SectorRegion[]
-  plans                SubscriptionPlan[]    @relation("ExpatriateRegionPlans")
-  surveys              Survey[]              @relation("ExpatriateRegionSurveys")
+  admin                User?                 @relation("ExpatriateLocalityAdmin", fields: [adminId], references: [id])
+  expatriateRegion     ExpatriateRegion      @relation(fields: [expatriateRegionId], references: [id])
+  adminUnits           ExpatriateAdminUnit[]
   users                User[]
-  votingItems          VotingItem[]          @relation("ExpatriateRegionVotingItems")
+}
+
+model ExpatriateAdminUnit {
+  id                     String               @id @default(uuid())
+  name                   String
+  code                   String?              @unique
+  description            String?
+  active                 Boolean              @default(true)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  expatriateLocalityId   String
+  adminId                String?
+  admin                  User?                @relation("ExpatriateAdminUnitAdmin", fields: [adminId], references: [id])
+  expatriateLocality     ExpatriateLocality   @relation(fields: [expatriateLocalityId], references: [id])
+  districts              ExpatriateDistrict[]
+  users                  User[]
+}
+
+model ExpatriateDistrict {
+  id                      String              @id @default(uuid())
+  name                    String
+  code                    String?             @unique
+  description             String?
+  active                  Boolean             @default(true)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  expatriateAdminUnitId   String
+  adminId                 String?
+  admin                   User?               @relation("ExpatriateDistrictAdmin", fields: [adminId], references: [id])
+  expatriateAdminUnit     ExpatriateAdminUnit @relation(fields: [expatriateAdminUnitId], references: [id])
+  users                   User[]
 }
 
 model SectorNationalLevel {
@@ -249,64 +316,86 @@ model SectorDistrict {
 }
 
 model User {
-  id                          String                @id @default(uuid())
-  email                       String?               @unique
-  mobileNumber                String                @unique
-  password                    String
-  role                        String                @default("USER")
-  adminLevel                  AdminLevel            @default(USER)
-  createdAt                   DateTime              @default(now())
-  updatedAt                   DateTime              @updatedAt
-  regionId                    String?
-  localityId                  String?
-  adminUnitId                 String?
-  districtId                  String?
-  activeHierarchy             ActiveHierarchy       @default(ORIGINAL)
-  expatriateRegionId          String?
-  nationalLevelId             String?
-  sectorAdminUnitId           String?
-  sectorDistrictId            String?
-  sectorLocalityId            String?
-  sectorNationalLevelId       String?
-  sectorRegionId              String?
-  managedAdminUnits           AdminUnit[]           @relation("AdminUnitAdmin")
-  chatMemberships             ChatMembership[]
-  sentMessages                ChatMessage[]
-  createdChatRooms            ChatRoom[]            @relation("ChatRoomCreator")
-  managedDistricts            District[]            @relation("DistrictAdmin")
-  managedExpatriateRegions    ExpatriateRegion[]    @relation("ExpatriateRegionAdmin")
-  managedLocalities           Locality[]            @relation("LocalityAdmin")
-  memberDetails               MemberDetails?
-  managedNationalLevels       NationalLevel[]       @relation("NationalLevelAdmin")
-  profile                     Profile?
-  refreshTokens               RefreshToken[]
-  managedRegions              Region[]              @relation("RegionAdmin")
-  reports                     Report[]
-  managedSectorAdminUnits     SectorAdminUnit[]     @relation("SectorAdminUnitAdmin")
-  managedSectorDistricts      SectorDistrict[]      @relation("SectorDistrictAdmin")
-  managedSectorLocalities     SectorLocality[]      @relation("SectorLocalityAdmin")
-  managedSectorNationalLevels SectorNationalLevel[] @relation("SectorNationalLevelAdmin")
-  managedSectorRegions        SectorRegion[]        @relation("SectorRegionAdmin")
-  subscriptions               Subscription[]
-  approvedPlans               SubscriptionPlan[]    @relation("PlanApprover")
-  createdPlans                SubscriptionPlan[]    @relation("PlanCreator")
-  surveys                     SurveyResponse[]
-  adminUnit                   AdminUnit?            @relation(fields: [adminUnitId], references: [id])
-  district                    District?             @relation(fields: [districtId], references: [id])
-  expatriateRegion            ExpatriateRegion?     @relation(fields: [expatriateRegionId], references: [id])
-  locality                    Locality?             @relation(fields: [localityId], references: [id])
-  nationalLevel               NationalLevel?        @relation(fields: [nationalLevelId], references: [id])
-  region                      Region?               @relation(fields: [regionId], references: [id])
-  sectorAdminUnit             SectorAdminUnit?      @relation(fields: [sectorAdminUnitId], references: [id])
-  sectorDistrict              SectorDistrict?       @relation(fields: [sectorDistrictId], references: [id])
-  sectorLocality              SectorLocality?       @relation(fields: [sectorLocalityId], references: [id])
-  sectorNationalLevel         SectorNationalLevel?  @relation(fields: [sectorNationalLevelId], references: [id])
-  sectorRegion                SectorRegion?         @relation(fields: [sectorRegionId], references: [id])
-  votes                       Vote[]
-  votingItems                 VotingItem[]
-  deletionRequestsCreated     DeletionRequest[]     @relation("DeletionRequestCreator")
-  deletionRequestsApproved    DeletionRequest[]     @relation("DeletionRequestApprover")
-  notifications               Notification[]
+  id                             String                    @id @default(uuid())
+  email                          String?                   @unique
+  mobileNumber                   String                    @unique
+  password                       String
+  role                           String                    @default("USER")
+  adminLevel                     AdminLevel                @default(USER)
+  createdAt                      DateTime                  @default(now())
+  updatedAt                      DateTime                  @updatedAt
+  // Original geographic hierarchy
+  regionId                       String?
+  localityId                     String?
+  adminUnitId                    String?
+  districtId                     String?
+  nationalLevelId                String?
+  // Expatriate hierarchy (mirrors geographic)
+  activeHierarchy                ActiveHierarchy           @default(ORIGINAL)
+  expatriateNationalLevelId      String?
+  expatriateRegionId             String?
+  expatriateLocalityId           String?
+  expatriateAdminUnitId          String?
+  expatriateDistrictId           String?
+  // Sector hierarchy
+  sectorAdminUnitId              String?
+  sectorDistrictId               String?
+  sectorLocalityId               String?
+  sectorNationalLevelId          String?
+  sectorRegionId                 String?
+  // Geographic hierarchy admin relations
+  managedAdminUnits              AdminUnit[]               @relation("AdminUnitAdmin")
+  managedDistricts               District[]                @relation("DistrictAdmin")
+  managedLocalities              Locality[]                @relation("LocalityAdmin")
+  managedNationalLevels          NationalLevel[]           @relation("NationalLevelAdmin")
+  managedRegions                 Region[]                  @relation("RegionAdmin")
+  // Expatriate hierarchy admin relations
+  managedExpatriateNationalLevels ExpatriateNationalLevel[] @relation("ExpatriateNationalLevelAdmin")
+  managedExpatriateRegions       ExpatriateRegion[]        @relation("ExpatriateRegionAdmin")
+  managedExpatriateLocalities    ExpatriateLocality[]      @relation("ExpatriateLocalityAdmin")
+  managedExpatriateAdminUnits    ExpatriateAdminUnit[]     @relation("ExpatriateAdminUnitAdmin")
+  managedExpatriateDistricts     ExpatriateDistrict[]      @relation("ExpatriateDistrictAdmin")
+  // Sector hierarchy admin relations
+  managedSectorAdminUnits        SectorAdminUnit[]         @relation("SectorAdminUnitAdmin")
+  managedSectorDistricts         SectorDistrict[]          @relation("SectorDistrictAdmin")
+  managedSectorLocalities        SectorLocality[]          @relation("SectorLocalityAdmin")
+  managedSectorNationalLevels    SectorNationalLevel[]     @relation("SectorNationalLevelAdmin")
+  managedSectorRegions           SectorRegion[]            @relation("SectorRegionAdmin")
+  // Other relations
+  chatMemberships                ChatMembership[]
+  sentMessages                   ChatMessage[]
+  createdChatRooms               ChatRoom[]                @relation("ChatRoomCreator")
+  memberDetails                  MemberDetails?
+  profile                        Profile?
+  refreshTokens                  RefreshToken[]
+  reports                        Report[]
+  subscriptions                  Subscription[]
+  approvedPlans                  SubscriptionPlan[]        @relation("PlanApprover")
+  createdPlans                   SubscriptionPlan[]        @relation("PlanCreator")
+  surveys                        SurveyResponse[]
+  votes                          Vote[]
+  votingItems                    VotingItem[]
+  deletionRequestsCreated        DeletionRequest[]         @relation("DeletionRequestCreator")
+  deletionRequestsApproved       DeletionRequest[]         @relation("DeletionRequestApprover")
+  notifications                  Notification[]
+  // Geographic hierarchy foreign keys
+  adminUnit                      AdminUnit?                @relation(fields: [adminUnitId], references: [id])
+  district                       District?                 @relation(fields: [districtId], references: [id])
+  locality                       Locality?                 @relation(fields: [localityId], references: [id])
+  nationalLevel                  NationalLevel?            @relation(fields: [nationalLevelId], references: [id])
+  region                         Region?                   @relation(fields: [regionId], references: [id])
+  // Expatriate hierarchy foreign keys
+  expatriateNationalLevel        ExpatriateNationalLevel?  @relation(fields: [expatriateNationalLevelId], references: [id])
+  expatriateRegion               ExpatriateRegion?         @relation(fields: [expatriateRegionId], references: [id])
+  expatriateLocality             ExpatriateLocality?       @relation(fields: [expatriateLocalityId], references: [id])
+  expatriateAdminUnit            ExpatriateAdminUnit?      @relation(fields: [expatriateAdminUnitId], references: [id])
+  expatriateDistrict             ExpatriateDistrict?       @relation(fields: [expatriateDistrictId], references: [id])
+  // Sector hierarchy foreign keys
+  sectorAdminUnit                SectorAdminUnit?          @relation(fields: [sectorAdminUnitId], references: [id])
+  sectorDistrict                 SectorDistrict?           @relation(fields: [sectorDistrictId], references: [id])
+  sectorLocality                 SectorLocality?           @relation(fields: [sectorLocalityId], references: [id])
+  sectorNationalLevel            SectorNationalLevel?      @relation(fields: [sectorNationalLevelId], references: [id])
+  sectorRegion                   SectorRegion?             @relation(fields: [sectorRegionId], references: [id])
 
   @@index([mobileNumber])
 }
@@ -738,16 +827,25 @@ enum DeletionRequestStatus {
 }
 
 enum AdminLevel {
+  // System level
+  ADMIN
   GENERAL_SECRETARIAT
+  // Geographic hierarchy
+  NATIONAL_LEVEL
   REGION
   LOCALITY
   ADMIN_UNIT
   DISTRICT
-  USER
-  ADMIN
-  NATIONAL_LEVEL
-  EXPATRIATE_GENERAL
+  // Expatriate hierarchy (mirrors geographic)
+  EXPATRIATE_NATIONAL_LEVEL
   EXPATRIATE_REGION
+  EXPATRIATE_LOCALITY
+  EXPATRIATE_ADMIN_UNIT
+  EXPATRIATE_DISTRICT
+  // Regular user
+  USER
+  // Legacy (keeping for backward compatibility)
+  EXPATRIATE_GENERAL
 }
 
 enum SectorType {
