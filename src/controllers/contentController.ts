@@ -339,7 +339,6 @@ export const updateBulletin = async (req: AuthenticatedRequest, res: Response, _
               res.status(400).json({ error: 'targetRegionId is required for updating bulletins' });
               return;
             }
-          }
         }
         
         // Ensure proper hierarchy targeting - make sure lower levels are only set if higher levels are set
