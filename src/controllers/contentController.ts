@@ -203,8 +203,16 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response, _
         }
         
         // Fallback: Validate that hierarchy targeting is provided
-        if (!bulletinData.targetRegionId && !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
-          console.warn('targetRegionId missing from bulletin data, attempting to fetch default region');
+        // Accept any of: Original (region), Expatriate (expatriate region), Sector (national level, region, locality, adminUnit, district), or Global (no targeting)
+        const hasOriginalHierarchy = bulletinData.targetRegionId || bulletinData.targetNationalLevelId;
+        const hasExpatriateHierarchy = bulletinData.targetExpatriateRegionId;
+        const hasSectorHierarchy = bulletinData.targetSectorNationalLevelId || bulletinData.targetSectorRegionId || 
+                                   bulletinData.targetSectorLocalityId || bulletinData.targetSectorAdminUnitId || 
+                                   bulletinData.targetSectorDistrictId;
+        const isGlobal = bulletinData.isGlobal === true;
+        
+        if (!hasOriginalHierarchy && !hasExpatriateHierarchy && !hasSectorHierarchy && !isGlobal) {
+          console.warn('No hierarchy targeting provided, attempting to fetch default region');
           
           try {
             // Get the first available region as a fallback
@@ -302,9 +310,15 @@ export const updateBulletin = async (req: AuthenticatedRequest, res: Response, _
         }
         
         // Fallback: Validate that hierarchy targeting is provided
-        if (bulletinData.targetRegionId === undefined || bulletinData.targetRegionId === null) {
-          if (!bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
-            console.warn('targetRegionId missing from bulletin update data, attempting to fetch default region');
+        const hasOriginalHierarchy = bulletinData.targetRegionId || bulletinData.targetNationalLevelId;
+        const hasExpatriateHierarchy = bulletinData.targetExpatriateRegionId;
+        const hasSectorHierarchy = bulletinData.targetSectorNationalLevelId || bulletinData.targetSectorRegionId || 
+                                   bulletinData.targetSectorLocalityId || bulletinData.targetSectorAdminUnitId || 
+                                   bulletinData.targetSectorDistrictId;
+        const isGlobal = bulletinData.isGlobal === true;
+        
+        if (!hasOriginalHierarchy && !hasExpatriateHierarchy && !hasSectorHierarchy && !isGlobal) {
+          console.warn('No hierarchy targeting provided for bulletin update, attempting to fetch default region');
             
             try {
               // Get the first available region as a fallback
@@ -725,8 +739,16 @@ export const createVotingItem = async (req: AuthenticatedRequest, res: Response,
     }
     
     // Validate that hierarchy targeting is provided (fallback)
-    if (!votingData.targetRegionId && !votingData.targetExpatriateRegionId && !votingData.targetSectorRegionId) {
-      res.status(400).json({ error: 'targetRegionId is required for creating voting items' });
+    // Accept any of: Original (region), Expatriate (expatriate region), Sector (national level, region, locality, adminUnit, district), or Global (no targeting)
+    const hasOriginalHierarchy = votingData.targetRegionId || votingData.targetNationalLevelId;
+    const hasExpatriateHierarchy = votingData.targetExpatriateRegionId;
+    const hasSectorHierarchy = votingData.targetSectorNationalLevelId || votingData.targetSectorRegionId || 
+                               votingData.targetSectorLocalityId || votingData.targetSectorAdminUnitId || 
+                               votingData.targetSectorDistrictId;
+    const isGlobal = votingData.isGlobal === true;
+    
+    if (!hasOriginalHierarchy && !hasExpatriateHierarchy && !hasSectorHierarchy && !isGlobal) {
+      res.status(400).json({ error: 'Hierarchy targeting is required for creating voting items' });
       return;
     }
     
@@ -785,8 +807,16 @@ export const createSurvey = async (req: AuthenticatedRequest, res: Response, _ne
     }
     
     // Validate that hierarchy targeting is provided (fallback)
-    if (!surveyData.targetRegionId && !surveyData.targetExpatriateRegionId && !surveyData.targetSectorRegionId) {
-      res.status(400).json({ error: 'targetRegionId is required for creating surveys' });
+    // Accept any of: Original (region), Expatriate (expatriate region), Sector (national level, region, locality, adminUnit, district), or Global (no targeting)
+    const hasOriginalSurveyHierarchy = surveyData.targetRegionId || surveyData.targetNationalLevelId;
+    const hasExpatriateSurveyHierarchy = surveyData.targetExpatriateRegionId;
+    const hasSectorSurveyHierarchy = surveyData.targetSectorNationalLevelId || surveyData.targetSectorRegionId || 
+                                      surveyData.targetSectorLocalityId || surveyData.targetSectorAdminUnitId || 
+                                      surveyData.targetSectorDistrictId;
+    const isSurveyGlobal = surveyData.isGlobal === true;
+    
+    if (!hasOriginalSurveyHierarchy && !hasExpatriateSurveyHierarchy && !hasSectorSurveyHierarchy && !isSurveyGlobal) {
+      res.status(400).json({ error: 'Hierarchy targeting is required for creating surveys' });
       return;
     }
     
