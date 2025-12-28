@@ -345,17 +345,43 @@ export async function getUserByEmail(email: string): Promise<any> {
 
 // Get user by mobile number (primary authentication method)
 export async function getUserByMobileNumber(mobileNumber: string): Promise<any> {
-  return prisma.user.findUnique({
-    where: { mobileNumber },
-    include: { 
-      profile: true,
-      memberDetails: true,
-      region: true,
-      locality: true,
-      adminUnit: true,
-      district: true
+  try {
+    return await prisma.user.findUnique({
+      where: { mobileNumber },
+      include: { 
+        profile: true,
+        memberDetails: true,
+        region: true,
+        locality: true,
+        adminUnit: true,
+        district: true
+      }
+    });
+  } catch (error: any) {
+    // Fallback if relations cause issues - query without relations first
+    if (error.code === 'P2022') {
+      console.error('Prisma client out of sync, attempting fallback query');
+      const user = await prisma.user.findUnique({
+        where: { mobileNumber },
+        include: { 
+          profile: true,
+          memberDetails: true
+        }
+      });
+      // Manually fetch relations if needed
+      if (user) {
+        const [region, locality, adminUnit, district] = await Promise.all([
+          user.regionId ? prisma.region.findUnique({ where: { id: user.regionId } }).catch(() => null) : null,
+          user.localityId ? prisma.locality.findUnique({ where: { id: user.localityId } }).catch(() => null) : null,
+          user.adminUnitId ? prisma.adminUnit.findUnique({ where: { id: user.adminUnitId } }).catch(() => null) : null,
+          user.districtId ? prisma.district.findUnique({ where: { id: user.districtId } }).catch(() => null) : null,
+        ]);
+        return { ...user, region, locality, adminUnit, district };
+      }
+      return user;
     }
-  });
+    throw error;
+  }
 }
 
 // Get user by phone number
