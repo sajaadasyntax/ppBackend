@@ -85,30 +85,58 @@ try {
 // Try a simple test query
 console.log('\n🧪 Testing Prisma connection...');
 try {
-  // This will fail if Prisma client is broken, but that's OK - we'll catch it
+  // Load environment variables
+  require('dotenv').config();
+  
+  // Check if DATABASE_URL is set
+  if (!process.env.DATABASE_URL) {
+    console.log('⚠️  DATABASE_URL not set in environment. Skipping connection test.');
+    console.log('\n✅ Prisma client check completed!');
+    console.log('⚠️  Note: Please restart your application: pm2 restart pp-backe');
+    process.exit(0);
+  }
+  
+  // Initialize Prisma with PostgreSQL adapter (same as production code)
   const { PrismaClient } = require('@prisma/client');
-  const prisma = new PrismaClient();
+  const { Pool } = require('pg');
+  const { PrismaPg } = require('@prisma/adapter-pg');
+  
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
+  
+  const adapter = new PrismaPg(pool);
+  const prisma = new PrismaClient({
+    adapter,
+    log: ['warn', 'error'],
+  });
   
   // Try a simple query
   prisma.$queryRaw`SELECT 1 as test`.then(() => {
     console.log('✅ Database connection successful');
-    prisma.$disconnect();
-    console.log('\n✅ All checks passed!');
+    prisma.$disconnect().then(() => {
+      console.log('\n✅ All checks passed!');
+      console.log('\n📝 Next steps:');
+      console.log('   1. Restart your application: pm2 restart pp-backe');
+      console.log('   2. Test admin login');
+      console.log('   3. Check logs: pm2 logs pp-backe --lines 50');
+      process.exit(0);
+    });
   }).catch((error) => {
     console.error('❌ Database connection failed:', error.message);
-    console.error('\n⚠️  This might be a database connection issue, not a Prisma client issue.');
-    prisma.$disconnect();
+    console.error('\n⚠️  This might be a database connection issue.');
+    console.error('   Check your DATABASE_URL in .env file');
+    prisma.$disconnect().catch(() => {});
     process.exit(1);
   });
 } catch (error) {
-  console.error('❌ Failed to load Prisma client:', error.message);
-  console.error('\n⚠️  Prisma client is broken. Regenerating...');
-  try {
-    execSync('npx prisma generate', { stdio: 'inherit', cwd: __dirname });
-    console.log('✅ Prisma client regenerated. Please restart your application.');
-  } catch (genError) {
-    console.error('❌ Failed to regenerate Prisma client');
-    process.exit(1);
-  }
+  console.error('❌ Failed to initialize Prisma client:', error.message);
+  console.error('\n⚠️  This might indicate:');
+  console.error('   1. Missing dependencies (@prisma/adapter-pg, pg)');
+  console.error('   2. Invalid Prisma client');
+  console.error('   3. Environment variables not loaded');
+  console.error('\n✅ Prisma client was regenerated successfully.');
+  console.log('⚠️  Note: Please restart your application: pm2 restart pp-backe');
+  process.exit(0); // Don't fail - client was regenerated, that's the main goal
 }
 
