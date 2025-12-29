@@ -1,9 +1,10 @@
-import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict } from '@prisma/client';
+import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict, SectorType } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
+import { createSectorsForLevel } from '../src/utils/sectorCreation';
 
 // Load environment variables - ts-node needs explicit dotenv loading
 const envPath = resolve(process.cwd(), '.env');
@@ -619,6 +620,9 @@ async function createGeographicalHierarchy() {
     
     createdRegions.push(region);
 
+    // Create sectors for the region automatically
+    await createSectorsForLevel('region', region.id, region.name);
+
     // 3. Create Localities (MUST belong to Region)
     for (const localityData of stateData.localities) {
       console.log(`    Creating locality: ${localityData.name}`);
@@ -636,6 +640,9 @@ async function createGeographicalHierarchy() {
           active: true
         }
       });
+
+      // Create sectors for the locality automatically
+      await createSectorsForLevel('locality', locality.id, locality.name);
 
       // 4. Create Administrative Units (MUST belong to Locality)
       for (const adminUnitData of localityData.adminUnits) {
@@ -658,12 +665,15 @@ async function createGeographicalHierarchy() {
           }
         });
 
+        // Create sectors for the admin unit automatically
+        await createSectorsForLevel('adminUnit', adminUnit.id, adminUnit.name);
+
         // 5. Create Districts (MUST belong to AdminUnit)
         for (const districtName of adminUnitData.districts) {
           console.log(`        Creating district: ${districtName}`);
           
           const districtCode = `${adminUnit.code || adminUnitCode}-${districtName}`;
-          await prisma.district.upsert({
+          const district = await prisma.district.upsert({
             where: {
               code: districtCode,
             },
@@ -678,6 +688,9 @@ async function createGeographicalHierarchy() {
               active: true
             }
           });
+
+          // Create sectors for the district automatically
+          await createSectorsForLevel('district', district.id, district.name);
         }
       }
     }

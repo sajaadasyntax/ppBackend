@@ -8,6 +8,7 @@ import {
   isNotFoundError,
   getConstraintErrorMessage 
 } from '../utils/hierarchyValidation';
+import { createSectorsForLevel } from '../utils/sectorCreation';
 
 /**
  * Hierarchy Management Controller
@@ -310,6 +311,9 @@ export const createRegion = async (req: AuthenticatedRequest, res: Response, _ne
       }
     });
     
+    // Automatically create sectors for the region
+    await createSectorsForLevel('region', region.id, region.name);
+    
     res.status(201).json(region);
   } catch (error: any) {
     console.error('Error creating region:', error);
@@ -359,6 +363,9 @@ export const createLocality = async (req: AuthenticatedRequest, res: Response, _
         region: true
       }
     });
+    
+    // Automatically create sectors for the locality
+    await createSectorsForLevel('locality', locality.id, locality.name);
     
     res.status(201).json(locality);
   } catch (error: any) {
@@ -411,6 +418,9 @@ export const createAdminUnit = async (req: AuthenticatedRequest, res: Response, 
         }
       }
     });
+    
+    // Automatically create sectors for the admin unit
+    await createSectorsForLevel('adminUnit', adminUnit.id, adminUnit.name);
     
     res.status(201).json(adminUnit);
   } catch (error: any) {
@@ -467,6 +477,9 @@ export const createDistrict = async (req: AuthenticatedRequest, res: Response, _
         }
       }
     });
+    
+    // Automatically create sectors for the district
+    await createSectorsForLevel('district', district.id, district.name);
     
     res.status(201).json(district);
   } catch (error: any) {
