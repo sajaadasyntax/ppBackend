@@ -11,21 +11,37 @@ SSH into your production server and run:
 ```bash
 cd /var/www/pp/ppBackend
 
-# Option 1: Use the diagnostic script (recommended)
-node check-prisma.js
+# Option 1: Use the migration check script (RECOMMENDED - checks both migrations and client)
+node check-migrations.js
 
-# Option 2: Manual fix
-# 1. Regenerate Prisma client (CRITICAL!)
+# Option 2: Use the shell script (interactive)
+chmod +x fix-migrations.sh
+./fix-migrations.sh
+
+# Option 3: Manual fix (if scripts don't work)
+# Step 1: Check migration status
+npx prisma migrate status
+
+# Step 2: Apply pending migrations (if any)
+npx prisma migrate deploy
+
+# Step 3: Regenerate Prisma client (CRITICAL!)
 npx prisma generate
 
-# 2. Restart the application
+# Step 4: Restart the application
 pm2 restart pp-backe
 
-# 3. Check if it's working
+# Step 5: Check if it's working
 pm2 logs pp-backe --lines 20
 ```
 
-**Note:** I've added a fallback that uses raw SQL queries, so login should work temporarily even with a broken Prisma client. However, you MUST regenerate the Prisma client for full functionality.
+**Important:** The issue is likely caused by:
+1. **Pending migrations** - Database schema doesn't match Prisma schema
+2. **Out-of-sync Prisma client** - Generated client doesn't match schema
+
+Both need to be fixed!
+
+**Note:** I've added a fallback that uses raw SQL queries, so login should work temporarily even with a broken Prisma client. However, you MUST apply migrations and regenerate the Prisma client for full functionality.
 
 ## What's Happening
 

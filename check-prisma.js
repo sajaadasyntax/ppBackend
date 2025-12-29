@@ -9,7 +9,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-console.log('🔍 Checking Prisma Client Status...\n');
+console.log('🔍 Checking Prisma Client and Migration Status...\n');
 
 // Check if schema exists
 const schemaPath = path.join(__dirname, 'prisma', 'schema.prisma');
@@ -58,6 +58,28 @@ if (!fs.existsSync(clientPath)) {
       console.log('✅ Prisma client is up to date');
     }
   }
+}
+
+// Check migration status
+console.log('\n📋 Checking migration status...');
+try {
+  const migrateStatus = execSync('npx prisma migrate status', { 
+    encoding: 'utf8', 
+    cwd: __dirname,
+    stdio: 'pipe'
+  });
+  
+  if (migrateStatus.includes('Database schema is up to date')) {
+    console.log('✅ All migrations are applied');
+  } else if (migrateStatus.includes('migrations have not yet been applied')) {
+    console.log('⚠️  WARNING: Pending migrations detected!');
+    console.log('   Run: npx prisma migrate deploy');
+    console.log('   Or use: node check-migrations.js');
+  } else {
+    console.log('Migration status:', migrateStatus.split('\n')[0]);
+  }
+} catch (migError) {
+  console.log('⚠️  Could not check migration status (this might be OK)');
 }
 
 // Try a simple test query
