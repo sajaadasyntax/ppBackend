@@ -724,32 +724,68 @@ export async function getAvailableUsersForSector(sectorId: string, level: Sector
       case 'region': {
         const sector = await prisma.sectorRegion.findUnique({ where: { id: sectorId } });
         if (sector?.description) {
-          const match = sector.description.match(/SOURCE:region:([a-f0-9-]+)/i);
-          hierarchyEntityId = match ? match[1] : null;
+          // Try JSON format first (new format)
+          try {
+            const metadata = JSON.parse(sector.description);
+            if (metadata.sourceEntityType === 'region' && metadata.sourceEntityId) {
+              hierarchyEntityId = metadata.sourceEntityId;
+            }
+          } catch {
+            // Fallback to legacy format
+            const match = sector.description.match(/SOURCE:region:([a-f0-9-]+)/i);
+            hierarchyEntityId = match ? match[1] : null;
+          }
         }
         break;
       }
       case 'locality': {
         const sector = await prisma.sectorLocality.findUnique({ where: { id: sectorId } });
         if (sector?.description) {
-          const match = sector.description.match(/SOURCE:locality:([a-f0-9-]+)/i);
-          hierarchyEntityId = match ? match[1] : null;
+          // Try JSON format first (new format)
+          try {
+            const metadata = JSON.parse(sector.description);
+            if (metadata.sourceEntityType === 'locality' && metadata.sourceEntityId) {
+              hierarchyEntityId = metadata.sourceEntityId;
+            }
+          } catch {
+            // Fallback to legacy format
+            const match = sector.description.match(/SOURCE:locality:([a-f0-9-]+)/i);
+            hierarchyEntityId = match ? match[1] : null;
+          }
         }
         break;
       }
       case 'adminUnit': {
         const sector = await prisma.sectorAdminUnit.findUnique({ where: { id: sectorId } });
         if (sector?.description) {
-          const match = sector.description.match(/SOURCE:adminUnit:([a-f0-9-]+)/i);
-          hierarchyEntityId = match ? match[1] : null;
+          // Try JSON format first (new format)
+          try {
+            const metadata = JSON.parse(sector.description);
+            if (metadata.sourceEntityType === 'adminUnit' && metadata.sourceEntityId) {
+              hierarchyEntityId = metadata.sourceEntityId;
+            }
+          } catch {
+            // Fallback to legacy format
+            const match = sector.description.match(/SOURCE:adminUnit:([a-f0-9-]+)/i);
+            hierarchyEntityId = match ? match[1] : null;
+          }
         }
         break;
       }
       case 'district': {
         const sector = await prisma.sectorDistrict.findUnique({ where: { id: sectorId } });
         if (sector?.description) {
-          const match = sector.description.match(/SOURCE:district:([a-f0-9-]+)/i);
-          hierarchyEntityId = match ? match[1] : null;
+          // Try JSON format first (new format)
+          try {
+            const metadata = JSON.parse(sector.description);
+            if (metadata.sourceEntityType === 'district' && metadata.sourceEntityId) {
+              hierarchyEntityId = metadata.sourceEntityId;
+            }
+          } catch {
+            // Fallback to legacy format
+            const match = sector.description.match(/SOURCE:district:([a-f0-9-]+)/i);
+            hierarchyEntityId = match ? match[1] : null;
+          }
         }
         break;
       }
@@ -763,66 +799,29 @@ export async function getAvailableUsersForSector(sectorId: string, level: Sector
     [idField]: null // Users not already assigned to this sector type
   };
 
-  // If we have a hierarchy entity ID, get all users from that entity and its sub-children
+  // If we have a hierarchy entity ID, get users from that hierarchy level itself (not sub-children)
   if (hierarchyEntityId) {
-    let districtIds: string[] = [];
-    
     switch (level) {
       case 'region': {
-        // Get all districts under all localities in this region
-        const localities = await prisma.locality.findMany({
-          where: { regionId: hierarchyEntityId },
-          select: { id: true }
-        });
-        const localityIds = localities.map(l => l.id);
-        
-        const adminUnits = await prisma.adminUnit.findMany({
-          where: { localityId: { in: localityIds } },
-          select: { id: true }
-        });
-        const adminUnitIds = adminUnits.map(au => au.id);
-        
-        const districts = await prisma.district.findMany({
-          where: { adminUnitId: { in: adminUnitIds } },
-          select: { id: true }
-        });
-        districtIds = districts.map(d => d.id);
+        // Users from this region only
+        whereClause.regionId = hierarchyEntityId;
         break;
       }
       case 'locality': {
-        // Get all districts under all admin units in this locality
-        const adminUnits = await prisma.adminUnit.findMany({
-          where: { localityId: hierarchyEntityId },
-          select: { id: true }
-        });
-        const adminUnitIds = adminUnits.map(au => au.id);
-        
-        const districts = await prisma.district.findMany({
-          where: { adminUnitId: { in: adminUnitIds } },
-          select: { id: true }
-        });
-        districtIds = districts.map(d => d.id);
+        // Users from this locality only
+        whereClause.localityId = hierarchyEntityId;
         break;
       }
       case 'adminUnit': {
-        // Get all districts under this admin unit
-        const districts = await prisma.district.findMany({
-          where: { adminUnitId: hierarchyEntityId },
-          select: { id: true }
-        });
-        districtIds = districts.map(d => d.id);
+        // Users from this admin unit only
+        whereClause.adminUnitId = hierarchyEntityId;
         break;
       }
       case 'district': {
-        // Just this district
-        districtIds = [hierarchyEntityId];
+        // Users from this district only
+        whereClause.districtId = hierarchyEntityId;
         break;
       }
-    }
-    
-    // Add district filter if we have district IDs
-    if (districtIds.length > 0) {
-      whereClause.districtId = { in: districtIds };
     }
   }
 
