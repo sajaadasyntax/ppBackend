@@ -1,4 +1,6 @@
 import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
@@ -16,8 +18,11 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Use standard Prisma Client for seed script (simpler and more reliable)
-const prisma = new PrismaClient({
+// Prisma 7.x requires adapter pattern for PostgreSQL
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ 
+  adapter,
   log: ['warn', 'error'],
   errorFormat: 'pretty'
 });
