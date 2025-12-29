@@ -1,5 +1,5 @@
-import prisma from './prisma';
-import { SectorType } from '@prisma/client';
+import { PrismaClient, SectorType } from '@prisma/client';
+import prismaDefault from './prisma';
 
 // Fixed 4 sector types
 const FIXED_SECTOR_TYPES: SectorType[] = ['SOCIAL', 'ECONOMIC', 'ORGANIZATIONAL', 'POLITICAL'];
@@ -23,6 +23,7 @@ function encodeSectorMetadata(sourceEntityId: string, sourceEntityType: string):
  * Helper to find a sector by its source entity ID from description metadata
  */
 async function findSectorBySourceId(
+  prisma: PrismaClient,
   sectorTable: 'sectorRegion' | 'sectorLocality' | 'sectorAdminUnit',
   sourceEntityId: string,
   sectorType: SectorType
@@ -79,8 +80,11 @@ async function findSectorBySourceId(
 export async function createSectorsForLevel(
   level: 'region' | 'locality' | 'adminUnit' | 'district',
   entityId: string,
-  entityName: string
+  entityName: string,
+  prismaInstance?: PrismaClient
 ): Promise<void> {
+  // Use provided instance or fallback to default (for controllers)
+  const prisma = prismaInstance || prismaDefault;
   try {
     switch (level) {
       case 'region': {
@@ -114,7 +118,7 @@ export async function createSectorsForLevel(
         // Find the parent region's sectors using ID-based lookup
         for (const sectorType of FIXED_SECTOR_TYPES) {
           // Try ID-based lookup first, fallback to name-based for legacy data
-          let sectorRegion = await findSectorBySourceId('sectorRegion', locality.regionId, sectorType);
+          let sectorRegion = await findSectorBySourceId(prisma, 'sectorRegion', locality.regionId, sectorType);
           
           // Fallback to name-based lookup for legacy sectors without metadata
           if (!sectorRegion) {
@@ -158,7 +162,7 @@ export async function createSectorsForLevel(
         // Find the parent locality's sectors using ID-based lookup
         for (const sectorType of FIXED_SECTOR_TYPES) {
           // Try ID-based lookup first, fallback to name-based for legacy data
-          let sectorLocality = await findSectorBySourceId('sectorLocality', adminUnit.localityId, sectorType);
+          let sectorLocality = await findSectorBySourceId(prisma, 'sectorLocality', adminUnit.localityId, sectorType);
           
           // Fallback to name-based lookup for legacy sectors without metadata
           if (!sectorLocality) {
@@ -202,7 +206,7 @@ export async function createSectorsForLevel(
         // Find the parent admin unit's sectors using ID-based lookup
         for (const sectorType of FIXED_SECTOR_TYPES) {
           // Try ID-based lookup first, fallback to name-based for legacy data
-          let sectorAdminUnit = await findSectorBySourceId('sectorAdminUnit', district.adminUnitId, sectorType);
+          let sectorAdminUnit = await findSectorBySourceId(prisma, 'sectorAdminUnit', district.adminUnitId, sectorType);
           
           // Fallback to name-based lookup for legacy sectors without metadata
           if (!sectorAdminUnit) {

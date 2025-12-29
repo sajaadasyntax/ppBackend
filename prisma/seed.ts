@@ -625,7 +625,7 @@ async function createGeographicalHierarchy() {
     createdRegions.push(region);
 
     // Create sectors for the region automatically
-    await createSectorsForLevel('region', region.id, region.name);
+    await createSectorsForLevel('region', region.id, region.name, prisma);
 
     // 3. Create Localities (MUST belong to Region)
     for (const localityData of stateData.localities) {
@@ -646,7 +646,7 @@ async function createGeographicalHierarchy() {
       });
 
       // Create sectors for the locality automatically
-      await createSectorsForLevel('locality', locality.id, locality.name);
+      await createSectorsForLevel('locality', locality.id, locality.name, prisma);
 
       // 4. Create Administrative Units (MUST belong to Locality)
       for (const adminUnitData of localityData.adminUnits) {
@@ -670,7 +670,7 @@ async function createGeographicalHierarchy() {
         });
 
         // Create sectors for the admin unit automatically
-        await createSectorsForLevel('adminUnit', adminUnit.id, adminUnit.name);
+        await createSectorsForLevel('adminUnit', adminUnit.id, adminUnit.name, prisma);
 
         // 5. Create Districts (MUST belong to AdminUnit)
         for (const districtName of adminUnitData.districts) {
@@ -694,7 +694,7 @@ async function createGeographicalHierarchy() {
           });
 
           // Create sectors for the district automatically
-          await createSectorsForLevel('district', district.id, district.name);
+          await createSectorsForLevel('district', district.id, district.name, prisma);
         }
       }
     }
