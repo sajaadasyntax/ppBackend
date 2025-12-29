@@ -358,29 +358,51 @@ export async function getUserByMobileNumber(mobileNumber: string): Promise<any> 
       }
     });
   } catch (error: any) {
-    // Fallback if relations cause issues - query without relations first
-    if (error.code === 'P2022') {
-      console.error('Prisma client out of sync, attempting fallback query');
+    // Fallback if Prisma client is out of sync - try minimal query first
+    console.error('Prisma query error, attempting fallback:', error.message);
+    
+    try {
+      // Try querying without any relations first
       const user = await prisma.user.findUnique({
-        where: { mobileNumber },
-        include: { 
-          profile: true,
-          memberDetails: true
-        }
+        where: { mobileNumber }
       });
-      // Manually fetch relations if needed
-      if (user) {
-        const [region, locality, adminUnit, district] = await Promise.all([
-          user.regionId ? prisma.region.findUnique({ where: { id: user.regionId } }).catch(() => null) : null,
-          user.localityId ? prisma.locality.findUnique({ where: { id: user.localityId } }).catch(() => null) : null,
-          user.adminUnitId ? prisma.adminUnit.findUnique({ where: { id: user.adminUnitId } }).catch(() => null) : null,
-          user.districtId ? prisma.district.findUnique({ where: { id: user.districtId } }).catch(() => null) : null,
-        ]);
-        return { ...user, region, locality, adminUnit, district };
+      
+      if (!user) {
+        return null;
       }
-      return user;
+      
+      // Try to fetch relations individually (they may fail, but that's OK)
+      const [profile, memberDetails, region, locality, adminUnit, district] = await Promise.all([
+        prisma.profile.findUnique({ where: { userId: user.id } }).catch(() => null),
+        prisma.memberDetails.findUnique({ where: { userId: user.id } }).catch(() => null),
+        user.regionId ? prisma.region.findUnique({ where: { id: user.regionId } }).catch(() => null) : null,
+        user.localityId ? prisma.locality.findUnique({ where: { id: user.localityId } }).catch(() => null) : null,
+        user.adminUnitId ? prisma.adminUnit.findUnique({ where: { id: user.adminUnitId } }).catch(() => null) : null,
+        user.districtId ? prisma.district.findUnique({ where: { id: user.districtId } }).catch(() => null) : null,
+      ]);
+      
+      return {
+        ...user,
+        profile,
+        memberDetails,
+        region,
+        locality,
+        adminUnit,
+        district
+      };
+    } catch (fallbackError: any) {
+      console.error('Fallback query also failed:', fallbackError.message);
+      // Last resort: try raw query if Prisma client is completely broken
+      try {
+        const result = await prisma.$queryRaw<Array<any>>`
+          SELECT * FROM "User" WHERE "mobileNumber" = ${mobileNumber} LIMIT 1
+        `;
+        return result[0] || null;
+      } catch (rawError: any) {
+        console.error('Raw query also failed:', rawError.message);
+        throw error; // Throw original error
+      }
     }
-    throw error;
   }
 }
 
