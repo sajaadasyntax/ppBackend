@@ -298,8 +298,8 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     }
     
     try {
-      // Verify refresh token
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'your-jwt-refresh-secret-key') as { id: string };
+      // Verify refresh token JWT is valid (throws if invalid)
+      jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'your-jwt-refresh-secret-key');
       
       // Find refresh token in database
       const savedToken = await prisma.refreshToken.findUnique({
