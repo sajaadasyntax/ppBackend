@@ -1,4 +1,4 @@
-import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict, SectorType } from '@prisma/client';
+import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
