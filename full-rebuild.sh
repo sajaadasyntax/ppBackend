@@ -22,15 +22,21 @@ echo ""
 
 echo "Step 3: Clearing Prisma cache..."
 rm -rf node_modules/.prisma
-rm -rf node_modules/@prisma/client
+# Don't delete @prisma/client - we need it for generation
+# Just clear the generated client cache
 echo "✅ Prisma cache cleared"
 echo ""
 
 echo "Step 4: Regenerating Prisma client..."
 npx prisma generate
 if [ $? -ne 0 ]; then
-    echo "❌ Failed to generate Prisma client"
-    exit 1
+    echo "⚠️  Prisma generate failed, trying to reinstall dependencies..."
+    npm install @prisma/client @prisma/adapter-pg prisma
+    npx prisma generate
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to generate Prisma client"
+        exit 1
+    fi
 fi
 echo "✅ Prisma client regenerated"
 echo ""

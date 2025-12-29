@@ -213,25 +213,125 @@ export async function createUser(userData: any): Promise<any> {
 
 // Get user by ID
 export async function getUserById(id: string): Promise<any> {
-  const user = await prisma.user.findUnique({
-    where: { id },
-    include: { 
-      profile: true,
-      memberDetails: true,
-      region: true,
-      locality: true,
-      adminUnit: true,
-      district: true
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { 
+        profile: true,
+        memberDetails: true,
+        region: true,
+        locality: true,
+        adminUnit: true,
+        district: true
+      }
+    });
+
+    if (!user) {
+      return null;
     }
-  });
 
-  if (!user) {
-    return null;
+    // Remove password from response
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
+  } catch (error: any) {
+    // Fallback if Prisma client is out of sync - use raw SQL immediately
+    console.error('Prisma query error (getUserById), using raw SQL fallback:', error.message);
+    
+    try {
+      // Use raw SQL query as fallback - this bypasses the broken Prisma client
+      const users = await prisma.$queryRaw<Array<any>>`
+        SELECT 
+          u.*,
+          p.id as profile_id, p."firstName", p."lastName", p."phoneNumber", p."avatarUrl", p.status as profile_status,
+          md.id as member_details_id, md."fullName", md.nickname, md."birthDate", md."birthPlace", 
+          md."birthLocality", md."birthState", md.gender, md.religion, md."maritalStatus",
+          r.id as region_id, r.name as region_name, r.code as region_code,
+          l.id as locality_id, l.name as locality_name, l.code as locality_code,
+          au.id as admin_unit_id, au.name as admin_unit_name, au.code as admin_unit_code,
+          d.id as district_id, d.name as district_name, d.code as district_code
+        FROM "User" u
+        LEFT JOIN "Profile" p ON p."userId" = u.id
+        LEFT JOIN "MemberDetails" md ON md."userId" = u.id
+        LEFT JOIN "Region" r ON r.id = u."regionId"
+        LEFT JOIN "Locality" l ON l.id = u."localityId"
+        LEFT JOIN "AdminUnit" au ON au.id = u."adminUnitId"
+        LEFT JOIN "District" d ON d.id = u."districtId"
+        WHERE u.id = ${id}
+        LIMIT 1
+      `;
+      
+      if (!users || users.length === 0) {
+        return null;
+      }
+      
+      const user = users[0];
+      
+      // Transform raw SQL result to match Prisma format
+      const userWithoutPassword = {
+        id: user.id,
+        email: user.email,
+        mobileNumber: user.mobileNumber,
+        role: user.role,
+        adminLevel: user.adminLevel,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        regionId: user.regionId,
+        localityId: user.localityId,
+        adminUnitId: user.adminUnitId,
+        districtId: user.districtId,
+        nationalLevelId: user.nationalLevelId,
+        activeHierarchy: user.activeHierarchy,
+        expatriateRegionId: user.expatriateRegionId,
+        profile: user.profile_id ? {
+          id: user.profile_id,
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phoneNumber: user.phoneNumber,
+          avatarUrl: user.avatarUrl,
+          status: user.profile_status
+        } : null,
+        memberDetails: user.member_details_id ? {
+          id: user.member_details_id,
+          userId: user.id,
+          fullName: user.fullName,
+          nickname: user.nickname,
+          birthDate: user.birthDate,
+          birthPlace: user.birthPlace,
+          birthLocality: user.birthLocality,
+          birthState: user.birthState,
+          gender: user.gender,
+          religion: user.religion,
+          maritalStatus: user.maritalStatus
+        } : null,
+        region: user.region_id ? {
+          id: user.region_id,
+          name: user.region_name,
+          code: user.region_code
+        } : null,
+        locality: user.locality_id ? {
+          id: user.locality_id,
+          name: user.locality_name,
+          code: user.locality_code
+        } : null,
+        adminUnit: user.admin_unit_id ? {
+          id: user.admin_unit_id,
+          name: user.admin_unit_name,
+          code: user.admin_unit_code
+        } : null,
+        district: user.district_id ? {
+          id: user.district_id,
+          name: user.district_name,
+          code: user.district_code
+        } : null
+      };
+      
+      return userWithoutPassword;
+    } catch (rawError: any) {
+      console.error('Raw SQL query also failed (getUserById):', rawError.message);
+      throw new Error(`Database query failed: ${rawError.message}`);
+    }
   }
-
-  // Remove password from response
-  const { password, ...userWithoutPassword } = user;
-  return userWithoutPassword;
 }
 
 // Get detailed member data by ID
