@@ -11,6 +11,10 @@ SSH into your production server and run:
 ```bash
 cd /var/www/pp/ppBackend
 
+# Option 1: Use the diagnostic script (recommended)
+node check-prisma.js
+
+# Option 2: Manual fix
 # 1. Regenerate Prisma client (CRITICAL!)
 npx prisma generate
 
@@ -20,6 +24,8 @@ pm2 restart pp-backe
 # 3. Check if it's working
 pm2 logs pp-backe --lines 20
 ```
+
+**Note:** I've added a fallback that uses raw SQL queries, so login should work temporarily even with a broken Prisma client. However, you MUST regenerate the Prisma client for full functionality.
 
 ## What's Happening
 

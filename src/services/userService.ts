@@ -358,50 +358,103 @@ export async function getUserByMobileNumber(mobileNumber: string): Promise<any> 
       }
     });
   } catch (error: any) {
-    // Fallback if Prisma client is out of sync - try minimal query first
-    console.error('Prisma query error, attempting fallback:', error.message);
+    // Fallback if Prisma client is out of sync - use raw SQL immediately
+    console.error('Prisma query error (client likely out of sync), using raw SQL fallback:', error.message);
+    console.error('ERROR: Please run "npx prisma generate" on the production server!');
     
     try {
-      // Try querying without any relations first
-      const user = await prisma.user.findUnique({
-        where: { mobileNumber }
-      });
+      // Use raw SQL query as fallback - this bypasses the broken Prisma client
+      const users = await prisma.$queryRaw<Array<any>>`
+        SELECT 
+          u.*,
+          p.id as profile_id, p."firstName", p."lastName", p."phoneNumber", p."avatarUrl", p.status as profile_status,
+          md.id as member_details_id, md."fullName", md.nickname, md."birthDate", md."birthPlace", 
+          md."birthLocality", md."birthState", md.gender, md.religion, md."maritalStatus",
+          r.id as region_id, r.name as region_name, r.code as region_code,
+          l.id as locality_id, l.name as locality_name, l.code as locality_code,
+          au.id as admin_unit_id, au.name as admin_unit_name, au.code as admin_unit_code,
+          d.id as district_id, d.name as district_name, d.code as district_code
+        FROM "User" u
+        LEFT JOIN "Profile" p ON p."userId" = u.id
+        LEFT JOIN "MemberDetails" md ON md."userId" = u.id
+        LEFT JOIN "Region" r ON r.id = u."regionId"
+        LEFT JOIN "Locality" l ON l.id = u."localityId"
+        LEFT JOIN "AdminUnit" au ON au.id = u."adminUnitId"
+        LEFT JOIN "District" d ON d.id = u."districtId"
+        WHERE u."mobileNumber" = ${mobileNumber}
+        LIMIT 1
+      `;
       
-      if (!user) {
+      if (!users || users.length === 0) {
         return null;
       }
       
-      // Try to fetch relations individually (they may fail, but that's OK)
-      const [profile, memberDetails, region, locality, adminUnit, district] = await Promise.all([
-        prisma.profile.findUnique({ where: { userId: user.id } }).catch(() => null),
-        prisma.memberDetails.findUnique({ where: { userId: user.id } }).catch(() => null),
-        user.regionId ? prisma.region.findUnique({ where: { id: user.regionId } }).catch(() => null) : null,
-        user.localityId ? prisma.locality.findUnique({ where: { id: user.localityId } }).catch(() => null) : null,
-        user.adminUnitId ? prisma.adminUnit.findUnique({ where: { id: user.adminUnitId } }).catch(() => null) : null,
-        user.districtId ? prisma.district.findUnique({ where: { id: user.districtId } }).catch(() => null) : null,
-      ]);
+      const user = users[0];
       
+      // Transform raw SQL result to match Prisma format
       return {
-        ...user,
-        profile,
-        memberDetails,
-        region,
-        locality,
-        adminUnit,
-        district
+        id: user.id,
+        email: user.email,
+        mobileNumber: user.mobileNumber,
+        password: user.password,
+        role: user.role,
+        adminLevel: user.adminLevel,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        regionId: user.regionId,
+        localityId: user.localityId,
+        adminUnitId: user.adminUnitId,
+        districtId: user.districtId,
+        nationalLevelId: user.nationalLevelId,
+        activeHierarchy: user.activeHierarchy,
+        expatriateRegionId: user.expatriateRegionId,
+        profile: user.profile_id ? {
+          id: user.profile_id,
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phoneNumber: user.phoneNumber,
+          avatarUrl: user.avatarUrl,
+          status: user.profile_status
+        } : null,
+        memberDetails: user.member_details_id ? {
+          id: user.member_details_id,
+          userId: user.id,
+          fullName: user.fullName,
+          nickname: user.nickname,
+          birthDate: user.birthDate,
+          birthPlace: user.birthPlace,
+          birthLocality: user.birthLocality,
+          birthState: user.birthState,
+          gender: user.gender,
+          religion: user.religion,
+          maritalStatus: user.maritalStatus
+        } : null,
+        region: user.region_id ? {
+          id: user.region_id,
+          name: user.region_name,
+          code: user.region_code
+        } : null,
+        locality: user.locality_id ? {
+          id: user.locality_id,
+          name: user.locality_name,
+          code: user.locality_code
+        } : null,
+        adminUnit: user.admin_unit_id ? {
+          id: user.admin_unit_id,
+          name: user.admin_unit_name,
+          code: user.admin_unit_code
+        } : null,
+        district: user.district_id ? {
+          id: user.district_id,
+          name: user.district_name,
+          code: user.district_code
+        } : null
       };
-    } catch (fallbackError: any) {
-      console.error('Fallback query also failed:', fallbackError.message);
-      // Last resort: try raw query if Prisma client is completely broken
-      try {
-        const result = await prisma.$queryRaw<Array<any>>`
-          SELECT * FROM "User" WHERE "mobileNumber" = ${mobileNumber} LIMIT 1
-        `;
-        return result[0] || null;
-      } catch (rawError: any) {
-        console.error('Raw query also failed:', rawError.message);
-        throw error; // Throw original error
-      }
+    } catch (rawError: any) {
+      console.error('Raw SQL query also failed:', rawError.message);
+      console.error('This indicates a serious database connection or schema issue.');
+      throw new Error(`Database query failed: ${rawError.message}. Please check database connection and run "npx prisma generate"`);
     }
   }
 }
