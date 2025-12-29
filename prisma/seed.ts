@@ -1,6 +1,4 @@
 import { PrismaClient, Region, ExpatriateRegion, SectorNationalLevel, SectorRegion, SectorLocality, SectorAdminUnit, SectorDistrict } from '@prisma/client';
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
@@ -18,10 +16,11 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Prisma 7.x uses the adapter pattern for database connections
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+// Use standard Prisma Client for seed script (simpler and more reliable)
+const prisma = new PrismaClient({
+  log: ['warn', 'error'],
+  errorFormat: 'pretty'
+});
 
 /**
  * Comprehensive seed file for PP Backend
