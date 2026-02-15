@@ -189,13 +189,13 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response, _
           if (user) {
             const autoHierarchy = HierarchyService.determineContentHierarchy(user);
             // Merge auto hierarchy with provided data (provided data takes precedence if explicitly set)
-            // Only auto-set if not explicitly provided
-            if (!bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
+            // Only auto-set if not explicitly provided AND not global
+            if (!bulletinData.isGlobal && !bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
                 !bulletinData.targetAdminUnitId && !bulletinData.targetDistrictId &&
                 !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
               Object.assign(bulletinData, autoHierarchy);
               console.log('Auto-set hierarchy based on admin level:', autoHierarchy);
-            } else {
+            } else if (!bulletinData.isGlobal) {
               // If some hierarchy is provided, merge with auto hierarchy for parent levels
               if (autoHierarchy.targetRegionId && !bulletinData.targetRegionId) {
                 bulletinData.targetRegionId = autoHierarchy.targetRegionId;
@@ -305,13 +305,13 @@ export const updateBulletin = async (req: AuthenticatedRequest, res: Response, _
           const user = await HierarchyService.getUserWithHierarchy(req.user.id);
           if (user) {
             const autoHierarchy = HierarchyService.determineContentHierarchy(user);
-            // Only auto-set if not explicitly provided in update
-            if (!bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
+            // Only auto-set if not explicitly provided in update AND not global
+            if (!bulletinData.isGlobal && !bulletinData.targetRegionId && !bulletinData.targetLocalityId && 
                 !bulletinData.targetAdminUnitId && !bulletinData.targetDistrictId &&
                 !bulletinData.targetExpatriateRegionId && !bulletinData.targetSectorRegionId) {
               Object.assign(bulletinData, autoHierarchy);
               console.log('Auto-set hierarchy for update based on admin level:', autoHierarchy);
-            } else {
+            } else if (!bulletinData.isGlobal) {
               // Merge parent levels if not explicitly set
               if (autoHierarchy.targetRegionId && !bulletinData.targetRegionId) {
                 bulletinData.targetRegionId = autoHierarchy.targetRegionId;
@@ -745,13 +745,13 @@ export const createVotingItem = async (req: AuthenticatedRequest, res: Response,
       user = await HierarchyService.getUserWithHierarchy(userId);
       if (user) {
         const autoHierarchy = HierarchyService.determineContentHierarchy(user);
-        // Only auto-set if not explicitly provided
-        if (!votingData.targetRegionId && !votingData.targetLocalityId && 
+        // Only auto-set if not explicitly provided AND not global
+        if (!votingData.isGlobal && !votingData.targetRegionId && !votingData.targetLocalityId && 
             !votingData.targetAdminUnitId && !votingData.targetDistrictId &&
             !votingData.targetExpatriateRegionId && !votingData.targetSectorRegionId) {
           Object.assign(votingData, autoHierarchy);
           console.log('Auto-set hierarchy for voting item based on admin level:', autoHierarchy);
-        } else {
+        } else if (!votingData.isGlobal) {
           // Merge parent levels if not explicitly set
           if (autoHierarchy.targetRegionId && !votingData.targetRegionId) {
             votingData.targetRegionId = autoHierarchy.targetRegionId;
@@ -823,13 +823,13 @@ export const createSurvey = async (req: AuthenticatedRequest, res: Response, _ne
       user = await HierarchyService.getUserWithHierarchy(userId);
       if (user) {
         const autoHierarchy = HierarchyService.determineContentHierarchy(user);
-        // Only auto-set if not explicitly provided
-        if (!surveyData.targetRegionId && !surveyData.targetLocalityId && 
+        // Only auto-set if not explicitly provided AND not global
+        if (!surveyData.isGlobal && !surveyData.targetRegionId && !surveyData.targetLocalityId && 
             !surveyData.targetAdminUnitId && !surveyData.targetDistrictId &&
             !surveyData.targetExpatriateRegionId && !surveyData.targetSectorRegionId) {
           Object.assign(surveyData, autoHierarchy);
           console.log('Auto-set hierarchy for survey based on admin level:', autoHierarchy);
-        } else {
+        } else if (!surveyData.isGlobal) {
           // Merge parent levels if not explicitly set
           if (autoHierarchy.targetRegionId && !surveyData.targetRegionId) {
             surveyData.targetRegionId = autoHierarchy.targetRegionId;
