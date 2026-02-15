@@ -378,6 +378,7 @@ model User {
   deletionRequestsCreated        DeletionRequest[]         @relation("DeletionRequestCreator")
   deletionRequestsApproved       DeletionRequest[]         @relation("DeletionRequestApprover")
   notifications                  Notification[]
+  uploadedFiles                  UploadedFile[]            @relation("UploadedFiles")
   // Geographic hierarchy foreign keys
   adminUnit                      AdminUnit?                @relation(fields: [adminUnitId], references: [id])
   district                       District?                 @relation(fields: [districtId], references: [id])
@@ -466,16 +467,17 @@ model Bulletin {
 }
 
 model ArchiveDocument {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   title     String
   type      String
   category  String
   date      DateTime
   size      String
   url       String
-  published Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  published Boolean   @default(true)
+  deletedAt DateTime? /// Soft-delete timestamp; null = active
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Survey {
@@ -859,4 +861,25 @@ enum ActiveHierarchy {
   ORIGINAL
   EXPATRIATE
   SECTOR
+}
+
+model UploadedFile {
+  id           String   @id @default(uuid())
+  filename     String   // Stored filename on disk
+  originalName String   // Original filename from client
+  mimeType     String
+  size         Int      // Size in bytes
+  category     String   // bulletin, archive, report, voice, receipt
+  path         String   // Relative URL path (e.g. /uploads/bulletins/xxx.jpg)
+  uploadedBy   String?  // User ID
+  status       String   @default("active") // active, deleted, quarantined
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User?    @relation("UploadedFiles", fields: [uploadedBy], references: [id])
+
+  @@index([category])
+  @@index([status])
+  @@index([uploadedBy])
+  @@index([createdAt])
 }

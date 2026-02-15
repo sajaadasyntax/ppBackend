@@ -7,6 +7,10 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../types';
+import {
+  BULLETIN_TITLE_MAX, BULLETIN_CONTENT_MAX,
+  checkLength,
+} from '../constants/fieldLimits';
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -164,6 +168,12 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response, _
       }
 
       const bulletinData = JSON.parse((req as any).body.bulletinData || '{}');
+
+      // ── Field length validation (must match Mobile & Admin maxLength) ───
+      const titleErr = checkLength('عنوان النشرة', bulletinData.title, BULLETIN_TITLE_MAX);
+      if (titleErr) { res.status(400).json({ error: titleErr }); return; }
+      const contentErr = checkLength('محتوى النشرة', bulletinData.content, BULLETIN_CONTENT_MAX);
+      if (contentErr) { res.status(400).json({ error: contentErr }); return; }
       
       // If image was uploaded, add the path to bulletinData
       if ((req as any).file) {
@@ -642,6 +652,17 @@ export const submitSurveyResponse = async (req: AuthenticatedRequest, res: Respo
     
     if (error.message === 'You have already responded to this survey') {
       res.status(409).json({ error: error.message });
+      return;
+    }
+
+    if (error.message === 'Survey not found' || error.message === 'This survey is no longer available') {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+
+    // Survey expired
+    if (error.message === 'انتهت فترة الاستبيان') {
+      res.status(410).json({ error: error.message });
       return;
     }
     

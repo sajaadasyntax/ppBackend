@@ -320,25 +320,45 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
         return;
       }
       
-      // Get user
+      // Get user — MUST re-read from DB to pick up any admin-side changes
+      // (role changes, hierarchy changes, status changes)
       const user = await userService.getUserById(savedToken.userId);
       if (!user) {
         res.status(401).json({ error: 'User not found' });
         return;
       }
+
+      // Block refresh if user is suspended/disabled
+      const userStatus = (user as any).profile?.status || 'active';
+      if (userStatus !== 'active') {
+        // Revoke all refresh tokens for this user
+        await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+        res.status(403).json({ error: 'تم تعليق حسابك. تواصل مع المسؤول.', code: 'ACCOUNT_SUSPENDED' });
+        return;
+      }
       
-      // Generate new access token with hierarchy information
+      // Generate new access token with FRESH data from DB (not stale JWT claims)
       const token = jwt.sign(
         { 
           id: user.id, 
           email: user.email, 
+          mobileNumber: user.mobileNumber,
           role: user.role,
           adminLevel: user.adminLevel || 'USER',
+          activeHierarchy: user.activeHierarchy || 'ORIGINAL',
           nationalLevelId: user.nationalLevelId || null,
           regionId: user.regionId || null,
           localityId: user.localityId || null,
           adminUnitId: user.adminUnitId || null,
-          districtId: user.districtId || null
+          districtId: user.districtId || null,
+          // Sector hierarchy
+          sectorNationalLevelId: user.sectorNationalLevelId || null,
+          sectorRegionId: user.sectorRegionId || null,
+          sectorLocalityId: user.sectorLocalityId || null,
+          sectorAdminUnitId: user.sectorAdminUnitId || null,
+          sectorDistrictId: user.sectorDistrictId || null,
+          // Expatriate hierarchy
+          expatriateRegionId: user.expatriateRegionId || null,
         },
         process.env.JWT_SECRET || 'your-jwt-secret-key',
         { expiresIn: '24h' }

@@ -3,6 +3,7 @@ import prisma from '../utils/prisma';
 import HierarchyService from '../services/hierarchyService';
 import { AuthenticatedRequest } from '../types';
 import { Subscription } from '@prisma/client';
+import { notify } from '../services/notificationService';
 
 /**
  * Calculate subscription end date based on period
@@ -1087,6 +1088,13 @@ export const updateSubscription = async (req: AuthenticatedRequest, res: Respons
       where: { id },
       data: updateData
     });
+
+    // Notify the user about payment status change
+    if (paymentStatus && subscription.userId) {
+      const statusLabel = paymentStatus === 'paid' ? 'تم قبول الدفع' :
+                          paymentStatus === 'rejected' ? 'تم رفض الدفع' : paymentStatus;
+      await notify.subscriptionUpdated(subscription.userId, statusLabel);
+    }
     
     res.json({
       success: true,
@@ -1267,6 +1275,44 @@ export const checkExpiredSubscriptions = async (_req: AuthenticatedRequest, res:
 };
 
 /**
+ * Link a pre-uploaded receipt file (presigned URL flow) to a subscription.
+ * Mobile uploads via presigned URL first, then calls this to associate the file.
+ */
+export const linkReceipt = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const currentUser = req.user;
+    const { filePath } = req.body;
+
+    if (!currentUser) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    if (!filePath) { res.status(400).json({ success: false, message: 'filePath is required' }); return; }
+
+    const subscription = await prisma.subscription.findFirst({
+      where: { id, userId: currentUser.id },
+    });
+
+    if (!subscription) {
+      res.status(404).json({ success: false, message: 'Subscription not found' });
+      return;
+    }
+
+    const updatedSubscription = await prisma.subscription.update({
+      where: { id },
+      data: {
+        receipt: filePath,
+        paymentStatus: 'pending_review',
+      },
+      include: { plan: true },
+    });
+
+    res.json({ success: true, data: updatedSubscription, message: 'Receipt linked successfully' });
+  } catch (error: any) {
+    console.error('Error linking receipt:', error);
+    res.status(500).json({ success: false, message: 'Failed to link receipt', error: error.message });
+  }
+};
+
+/**
  * Upload payment receipt for a subscription
  */
 export const uploadReceipt = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
@@ -1304,15 +1350,29 @@ export const uploadReceipt = async (req: AuthenticatedRequest, res: Response, _n
       return;
     }
     
-    // Convert file buffer to base64 for storage
-    // In production, you'd save this to a file system or cloud storage
-    const receiptData = `data:${(req as any).file.mimetype};base64,${(req as any).file.buffer.toString('base64')}`;
-    
-    // Update subscription with receipt
+    // Save receipt to file system instead of base64 in DB (more efficient)
+    const fs = require('fs');
+    const path = require('path');
+    const { v4: uuidv4 } = require('uuid');
+
+    const uploadDir = path.join(process.cwd(), 'public/uploads/receipts');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const ext = (req as any).file.originalname
+      ? path.extname((req as any).file.originalname)
+      : '.jpg';
+    const filename = `receipt-${uuidv4()}${ext}`;
+    const filePath = path.join(uploadDir, filename);
+    fs.writeFileSync(filePath, (req as any).file.buffer);
+    const receiptUrl = `/uploads/receipts/${filename}`;
+
+    // Update subscription with receipt URL (no longer base64)
     const updatedSubscription = await prisma.subscription.update({
       where: { id: id },
       data: {
-        receipt: receiptData,
+        receipt: receiptUrl,
         paymentStatus: 'pending_review'
       },
       include: {

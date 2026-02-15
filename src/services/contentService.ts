@@ -1,6 +1,4 @@
 import prisma from '../utils/prisma';
-import path from 'path';
-import fs from 'fs';
 import { buildBulletinWhereClause, buildContentWhereClause, buildReportWhereClause } from './multiHierarchyFilterService';
 
 // Helper functions for hierarchical access control (reserved for future use)
@@ -405,7 +403,8 @@ export const getArchiveDocuments = async (category?: string): Promise<any[]> => 
     const documents = await prisma.archiveDocument.findMany({
       where: {
         ...where,
-        published: true
+        published: true,
+        deletedAt: null, // Exclude soft-deleted documents
       },
       orderBy: { date: 'desc' },
       select: {
@@ -465,47 +464,37 @@ export const createArchiveDocument = async (documentData: any): Promise<any> => 
   }
 };
 
-// Delete an archive document
+// Soft-delete an archive document (sets deletedAt instead of removing the row)
 export const deleteArchiveDocument = async (id: string): Promise<boolean> => {
   try {
-    console.log('Attempting to delete document with ID in service:', id);
+    console.log('Attempting to soft-delete document with ID in service:', id);
     
-    // First, get the document to check if it exists and to get the file path
+    // First, get the document to check if it exists
     const document = await prisma.archiveDocument.findUnique({
       where: { id }
     });
     
-    console.log('Found document to delete:', document);
+    console.log('Found document to soft-delete:', document);
     
     if (!document) {
       console.log('Document not found');
       return false;
     }
+
+    if (document.deletedAt) {
+      console.log('Document already soft-deleted');
+      return true;
+    }
     
-    // Delete the document from the database
-    const deleted = await prisma.archiveDocument.delete({
-      where: { id }
+    // Soft-delete: mark as deleted instead of removing
+    await prisma.archiveDocument.update({
+      where: { id },
+      data: { deletedAt: new Date() }
     });
     
-    console.log('Deleted document from database:', deleted);
-    
-    // If the file exists in the uploads folder, delete it
-    if (document.url && document.url.startsWith('/uploads/')) {
-      try {
-        const filePath = path.join(__dirname, '../../public', document.url);
-        console.log('Checking for file at path:', filePath);
-        
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log('Deleted file from disk');
-        } else {
-          console.log('File does not exist on disk');
-        }
-      } catch (fileError: any) {
-        // Log but don't fail if file deletion fails
-        console.error('Error deleting file from disk:', fileError);
-      }
-    }
+    console.log('Soft-deleted document from database');
+    // NOTE: file is retained on disk for potential recovery.
+    // A scheduled cleanup job can purge files for documents deleted > N days ago.
     
     return true;
   } catch (error: any) {
@@ -790,6 +779,18 @@ export const getSurveyById = async (surveyId: string, userId: string): Promise<a
 
 export const submitSurveyResponse = async (surveyId: string, userId: string, answers: any): Promise<any> => {
   try {
+    // Check survey exists and is still open
+    const survey = await prisma.survey.findUnique({ where: { id: surveyId } });
+    if (!survey) {
+      throw new Error('Survey not found');
+    }
+    if (!survey.published) {
+      throw new Error('This survey is no longer available');
+    }
+    if (new Date(survey.dueDate) < new Date()) {
+      throw new Error('انتهت فترة الاستبيان');
+    }
+
     // Check if the user has already responded to this survey
     const existingResponse = await prisma.surveyResponse.findUnique({
       where: {

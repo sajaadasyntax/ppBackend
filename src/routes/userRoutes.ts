@@ -30,6 +30,11 @@ router.put('/:id/hierarchy', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userCo
 // Available admins - hierarchical admins can fetch for their scope
 router.get('/available-admins', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'NATIONAL_LEVEL', 'REGION', 'LOCALITY', 'ADMIN_UNIT']), userController.getAvailableAdmins);
 
+// Registration approval routes - admins can review pending signups
+router.get('/pending-registrations', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.getPendingRegistrations);
+router.post('/pending-registrations/:id/approve', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.approveRegistration);
+router.post('/pending-registrations/:id/reject', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), userController.rejectRegistration);
+
 // Admin routes - requires admin role
 router.get('/', authorize(['ADMIN']), userController.getAllUsers);
 router.get('/memberships', authorize(['ADMIN']), userController.getMemberships);

@@ -2,6 +2,9 @@ import userService from '../services/userService';
 import prisma from '../utils/prisma';
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types';
+import { generateAccessToken } from '../utils/auth';
+import { notify } from '../services/notificationService';
+import { canAssignLevel } from '../utils/hierarchyRank';
 
 // Get all users with pagination and hierarchical access control
 export const getAllUsers = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
@@ -113,12 +116,25 @@ export const createMember = async (req: AuthenticatedRequest, res: Response, _ne
       return;
     }
     
-    // Validate hierarchy selection - districtId is REQUIRED
-    if (!hierarchyInfo || !hierarchyInfo.districtId) {
-      res.status(400).json({ 
-        error: 'يجب اختيار الحي (District) للعضو - المستخدمون يجب أن يكونوا في مستوى الحي فقط' 
-      });
-      return;
+    // Determine hierarchy type (default to GEOGRAPHIC for backward compatibility)
+    const hierarchyType = hierarchyInfo?.hierarchyType || 'GEOGRAPHIC';
+    
+    // Validate hierarchy selection based on type
+    if (hierarchyType === 'EXPATRIATE') {
+      if (!hierarchyInfo || !hierarchyInfo.expatriateDistrictId) {
+        res.status(400).json({ 
+          error: 'يجب اختيار حي المغتربين للعضو - المستخدمون يجب أن يكونوا في مستوى الحي فقط' 
+        });
+        return;
+      }
+    } else {
+      // GEOGRAPHIC hierarchy
+      if (!hierarchyInfo || !hierarchyInfo.districtId) {
+        res.status(400).json({ 
+          error: 'يجب اختيار الحي (District) للعضو - المستخدمون يجب أن يكونوا في مستوى الحي فقط' 
+        });
+        return;
+      }
     }
     
     // Check if user already exists with the same email
@@ -138,92 +154,179 @@ export const createMember = async (req: AuthenticatedRequest, res: Response, _ne
     // Generate a random password (can be changed later) unless provided (public signup)
     const tempPassword = password && password.length >= 6 ? password : Math.random().toString(36).slice(-8);
     
-    // Fetch district to get parent hierarchy IDs and names
-    const district = await prisma.district.findUnique({
-      where: { id: hierarchyInfo.districtId },
-      include: {
-        adminUnit: {
-          include: {
-            locality: {
-              include: {
-                region: true
+    let regionName = '';
+    let localityName = '';
+    let userData: any;
+    
+    if (hierarchyType === 'EXPATRIATE') {
+      // Fetch expatriate district to get parent hierarchy IDs and names
+      const expatriateDistrict = await prisma.expatriateDistrict.findUnique({
+        where: { id: hierarchyInfo.expatriateDistrictId },
+        include: {
+          expatriateAdminUnit: {
+            include: {
+              expatriateLocality: {
+                include: {
+                  expatriateRegion: true
+                }
               }
             }
           }
         }
-      }
-    });
+      });
 
-    if (!district) {
-      res.status(400).json({ error: 'الحي المحدد غير موجود' });
-      return;
+      if (!expatriateDistrict) {
+        res.status(400).json({ error: 'حي المغتربين المحدد غير موجود' });
+        return;
+      }
+
+      // Get names from expatriate district hierarchy for memberDetails
+      regionName = expatriateDistrict.expatriateAdminUnit.expatriateLocality.expatriateRegion.name;
+      localityName = expatriateDistrict.expatriateAdminUnit.expatriateLocality.name;
+      
+      // Prepare user data for expatriate hierarchy
+      userData = {
+        email: residenceInfo.email,
+        password: tempPassword,
+        role: 'USER',
+        mobileNumber: residenceInfo.mobile,
+        // Set expatriate hierarchy IDs
+        expatriateDistrictId: expatriateDistrict.id,
+        expatriateAdminUnitId: expatriateDistrict.expatriateAdminUnitId,
+        expatriateLocalityId: expatriateDistrict.expatriateAdminUnit.expatriateLocalityId,
+        expatriateRegionId: expatriateDistrict.expatriateAdminUnit.expatriateLocality.expatriateRegionId,
+        // Set active hierarchy to EXPATRIATE
+        activeHierarchy: 'EXPATRIATE',
+        profile: {
+          firstName: personalInfo.fullName.split(' ')[0] || '',
+          lastName: personalInfo.fullName.split(' ').slice(1).join(' ') || '',
+          phoneNumber: residenceInfo.mobile,
+          status: publicSignup ? 'disabled' : 'active'
+        },
+        memberDetails: {
+          fullName: personalInfo.fullName,
+          nickname: personalInfo.nickname,
+          birthDate: personalInfo.birthDate,
+          birthPlace: personalInfo.birthPlace,
+          birthLocality: personalInfo.birthLocality,
+          birthState: personalInfo.birthState,
+          gender: personalInfo.gender,
+          religion: personalInfo.religion,
+          maritalStatus: personalInfo.maritalStatus,
+          nationalId: personalInfo.nationalId,
+          nationalIdIssueDate: personalInfo.nationalIdIssueDate,
+          passportNumber: personalInfo.passportNumber,
+          neighborhood: residenceInfo.neighborhood,
+          locality: localityName,
+          state: regionName,
+          phone: residenceInfo.phone,
+          mobile: residenceInfo.mobile,
+          highestEducation: educationAndWork?.highestEducation,
+          educationInstitution: educationAndWork?.educationInstitution,
+          graduationYear: educationAndWork?.graduationYear,
+          currentJob: educationAndWork?.currentJob,
+          jobSector: educationAndWork?.jobSector,
+          employmentStatus: educationAndWork?.employmentStatus,
+          workAddress: educationAndWork?.workAddress,
+          disability: additionalInfo?.disability,
+          residenceAbroad: additionalInfo?.residenceAbroad,
+          electoralDistrict: additionalInfo?.electoralDistrict,
+          previousCouncilMembership: politicalAndSocialActivity?.previousCouncilMembership,
+          previousPartyMembership: politicalAndSocialActivity?.previousPartyMembership,
+          civilSocietyParticipation: politicalAndSocialActivity?.civilSocietyParticipation,
+          clubMembership: politicalAndSocialActivity?.clubMembership,
+          professionalMembership: politicalAndSocialActivity?.professionalMembership
+        }
+      };
+    } else {
+      // GEOGRAPHIC hierarchy
+      // Fetch district to get parent hierarchy IDs and names
+      const district = await prisma.district.findUnique({
+        where: { id: hierarchyInfo.districtId },
+        include: {
+          adminUnit: {
+            include: {
+              locality: {
+                include: {
+                  region: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!district) {
+        res.status(400).json({ error: 'الحي المحدد غير موجود' });
+        return;
+      }
+
+      // Get names from district hierarchy for memberDetails
+      regionName = district.adminUnit.locality.region.name;
+      localityName = district.adminUnit.locality.name;
+      
+      // Prepare user data with basic information
+      // Parent IDs will be auto-derived by userService.createUser from districtId
+      userData = {
+        email: residenceInfo.email,
+        password: tempPassword,
+        role: 'USER', // Default role for new members
+        mobileNumber: residenceInfo.mobile,
+        // Only pass districtId - parent IDs will be auto-derived
+        districtId: district.id,
+        profile: {
+          firstName: personalInfo.fullName.split(' ')[0] || '',
+          lastName: personalInfo.fullName.split(' ').slice(1).join(' ') || '',
+          phoneNumber: residenceInfo.mobile,
+          // If it's a public signup, require admin activation
+          status: publicSignup ? 'disabled' : 'active'
+        },
+        // Add the new memberDetails object
+        memberDetails: {
+          // Personal Information
+          fullName: personalInfo.fullName,
+          nickname: personalInfo.nickname,
+          birthDate: personalInfo.birthDate,
+          birthPlace: personalInfo.birthPlace,
+          birthLocality: personalInfo.birthLocality,
+          birthState: personalInfo.birthState,
+          gender: personalInfo.gender,
+          religion: personalInfo.religion,
+          maritalStatus: personalInfo.maritalStatus,
+          nationalId: personalInfo.nationalId,
+          nationalIdIssueDate: personalInfo.nationalIdIssueDate,
+          passportNumber: personalInfo.passportNumber,
+          
+          // Residence Information
+          neighborhood: residenceInfo.neighborhood,
+          locality: localityName,
+          state: regionName,
+          phone: residenceInfo.phone,
+          mobile: residenceInfo.mobile,
+          
+          // Education and Work
+          highestEducation: educationAndWork?.highestEducation,
+          educationInstitution: educationAndWork?.educationInstitution,
+          graduationYear: educationAndWork?.graduationYear,
+          currentJob: educationAndWork?.currentJob,
+          jobSector: educationAndWork?.jobSector,
+          employmentStatus: educationAndWork?.employmentStatus,
+          workAddress: educationAndWork?.workAddress,
+          
+          // Additional Information
+          disability: additionalInfo?.disability,
+          residenceAbroad: additionalInfo?.residenceAbroad,
+          electoralDistrict: additionalInfo?.electoralDistrict,
+          
+          // Political and Social Activity
+          previousCouncilMembership: politicalAndSocialActivity?.previousCouncilMembership,
+          previousPartyMembership: politicalAndSocialActivity?.previousPartyMembership,
+          civilSocietyParticipation: politicalAndSocialActivity?.civilSocietyParticipation,
+          clubMembership: politicalAndSocialActivity?.clubMembership,
+          professionalMembership: politicalAndSocialActivity?.professionalMembership
+        }
+      };
     }
-
-    // Get names from district hierarchy for memberDetails
-    const regionName = district.adminUnit.locality.region.name;
-    const localityName = district.adminUnit.locality.name;
-    
-    // Prepare user data with basic information
-    // Parent IDs will be auto-derived by userService.createUser from districtId
-    const userData = {
-      email: residenceInfo.email,
-      password: tempPassword,
-      role: 'USER', // Default role for new members
-      mobileNumber: residenceInfo.mobile,
-      // Only pass districtId - parent IDs will be auto-derived
-      districtId: district.id,
-      profile: {
-        firstName: personalInfo.fullName.split(' ')[0] || '',
-        lastName: personalInfo.fullName.split(' ').slice(1).join(' ') || '',
-        phoneNumber: residenceInfo.mobile,
-        // If it's a public signup, require admin activation
-        status: publicSignup ? 'disabled' : 'active'
-      },
-      // Add the new memberDetails object
-      memberDetails: {
-        // Personal Information
-        fullName: personalInfo.fullName,
-        nickname: personalInfo.nickname,
-        birthDate: personalInfo.birthDate,
-        birthPlace: personalInfo.birthPlace,
-        birthLocality: personalInfo.birthLocality,
-        birthState: personalInfo.birthState,
-        gender: personalInfo.gender,
-        religion: personalInfo.religion,
-        maritalStatus: personalInfo.maritalStatus,
-        nationalId: personalInfo.nationalId,
-        nationalIdIssueDate: personalInfo.nationalIdIssueDate,
-        passportNumber: personalInfo.passportNumber,
-        
-        // Residence Information
-        neighborhood: residenceInfo.neighborhood,
-        locality: localityName,
-        state: regionName,
-        phone: residenceInfo.phone,
-        mobile: residenceInfo.mobile,
-        
-        // Education and Work
-        highestEducation: educationAndWork?.highestEducation,
-        educationInstitution: educationAndWork?.educationInstitution,
-        graduationYear: educationAndWork?.graduationYear,
-        currentJob: educationAndWork?.currentJob,
-        jobSector: educationAndWork?.jobSector,
-        employmentStatus: educationAndWork?.employmentStatus,
-        workAddress: educationAndWork?.workAddress,
-        
-        // Additional Information
-        disability: additionalInfo?.disability,
-        residenceAbroad: additionalInfo?.residenceAbroad,
-        electoralDistrict: additionalInfo?.electoralDistrict,
-        
-        // Political and Social Activity
-        previousCouncilMembership: politicalAndSocialActivity?.previousCouncilMembership,
-        previousPartyMembership: politicalAndSocialActivity?.previousPartyMembership,
-        civilSocietyParticipation: politicalAndSocialActivity?.civilSocietyParticipation,
-        clubMembership: politicalAndSocialActivity?.clubMembership,
-        professionalMembership: politicalAndSocialActivity?.professionalMembership
-      }
-    };
     
     // Create user with all the detailed information
     const user = await userService.createUser(userData);
@@ -253,7 +356,7 @@ export const createMember = async (req: AuthenticatedRequest, res: Response, _ne
 export const updateUser = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { email, password, role, firstName, lastName, phoneNumber, avatarUrl } = req.body;
+    const { email, password, role, adminLevel, firstName, lastName, phoneNumber, avatarUrl } = req.body;
 
     // Check if user exists
     const user = await userService.getUserById(id);
@@ -262,8 +365,20 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response, _next
       return;
     }
 
+    // ── SECURITY: Prevent privilege escalation on role/level changes ──
+    const creatorLevel = req.user?.adminLevel || 'USER';
+    if (adminLevel && adminLevel !== user.adminLevel) {
+      if (!canAssignLevel(creatorLevel, adminLevel)) {
+        res.status(403).json({
+          error: 'لا يمكنك ترقية مستخدم إلى مستوى أعلى من صلاحياتك.',
+          code: 'PRIVILEGE_ESCALATION_DENIED',
+        });
+        return;
+      }
+    }
+
     // Prepare user data
-    const userData = {
+    const userData: any = {
       email,
       password,
       role,
@@ -274,6 +389,8 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response, _next
         avatarUrl
       }
     };
+    // Only include adminLevel if explicitly provided
+    if (adminLevel) userData.adminLevel = adminLevel;
 
     // Update user
     const updatedUser = await userService.updateUser(id, userData);
@@ -329,6 +446,216 @@ export const getCurrentUser = async (req: AuthenticatedRequest, res: Response, _
 
 // Alias for getCurrentUser
 export const getUserProfile = getCurrentUser;
+
+/**
+ * Get pending registrations (profile.status === 'disabled') for admin approval.
+ * Supports filtering by hierarchy type: ?hierarchyType=GEOGRAPHIC|EXPATRIATE|ALL
+ * Supports search by name/mobile: ?search=keyword
+ */
+export const getPendingRegistrations = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const hierarchyTypeFilter = (req.query.hierarchyType as string) || 'ALL';
+    const searchQuery = (req.query.search as string) || '';
+    const page = parseInt(String(req.query.page || '1')) || 1;
+    const limit = parseInt(String(req.query.limit || '50')) || 50;
+    const skip = (page - 1) * limit;
+
+    const adminUser = req.user;
+
+    // Build where clause: only users with disabled status (pending activation)
+    const where: any = {
+      profile: { status: 'disabled' },
+      role: 'USER', // Only regular users go through approval
+    };
+
+    // ── SECURITY: Scope to the requesting admin's hierarchy ─────────
+    // ADMIN and GENERAL_SECRETARIAT see everything.
+    // Lower-level admins only see registrations within their jurisdiction.
+    const adminLevel = adminUser?.adminLevel;
+    if (adminLevel && adminLevel !== 'ADMIN' && adminLevel !== 'GENERAL_SECRETARIAT' && adminLevel !== 'NATIONAL_LEVEL') {
+      if (adminLevel === 'REGION' && adminUser?.regionId) {
+        where.regionId = adminUser.regionId;
+      } else if (adminLevel === 'LOCALITY' && adminUser?.localityId) {
+        where.localityId = adminUser.localityId;
+      } else if (adminLevel === 'ADMIN_UNIT' && adminUser?.adminUnitId) {
+        where.adminUnitId = adminUser.adminUnitId;
+      } else if (adminLevel === 'DISTRICT' && adminUser?.districtId) {
+        where.districtId = adminUser.districtId;
+      } else if (adminLevel?.startsWith('EXPATRIATE') && adminUser?.expatriateRegionId) {
+        where.expatriateRegionId = adminUser.expatriateRegionId;
+      }
+    }
+
+    // Filter by hierarchy type
+    if (hierarchyTypeFilter === 'GEOGRAPHIC') {
+      where.activeHierarchy = 'ORIGINAL';
+      // Must have at least a districtId in the geographic hierarchy
+      where.districtId = { not: null };
+    } else if (hierarchyTypeFilter === 'EXPATRIATE') {
+      where.activeHierarchy = 'EXPATRIATE';
+      where.expatriateDistrictId = { not: null };
+    }
+    // 'ALL' = no extra filter
+
+    // Search by name or mobile
+    if (searchQuery.trim()) {
+      where.OR = [
+        { mobileNumber: { contains: searchQuery.trim() } },
+        { email: { contains: searchQuery.trim(), mode: 'insensitive' } },
+        { memberDetails: { fullName: { contains: searchQuery.trim(), mode: 'insensitive' } } },
+        { profile: { firstName: { contains: searchQuery.trim(), mode: 'insensitive' } } },
+        { profile: { lastName: { contains: searchQuery.trim(), mode: 'insensitive' } } },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          profile: true,
+          memberDetails: { select: { fullName: true, nationalId: true, mobile: true, state: true, locality: true } },
+          // Geographic hierarchy path
+          region: { select: { id: true, name: true } },
+          locality: { select: { id: true, name: true } },
+          adminUnit: { select: { id: true, name: true } },
+          district: { select: { id: true, name: true } },
+          // Expatriate hierarchy path
+          expatriateRegion: { select: { id: true, name: true } },
+          expatriateLocality: { select: { id: true, name: true } },
+          expatriateAdminUnit: { select: { id: true, name: true } },
+          expatriateDistrict: { select: { id: true, name: true } },
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    // Format response
+    const registrations = users.map((u) => ({
+      id: u.id,
+      fullName: u.memberDetails?.fullName || [u.profile?.firstName, u.profile?.lastName].filter(Boolean).join(' ') || u.email,
+      nationalId: u.memberDetails?.nationalId || null,
+      email: u.email,
+      mobileNumber: u.mobileNumber,
+      hierarchyType: u.activeHierarchy === 'EXPATRIATE' ? 'EXPATRIATE' : 'GEOGRAPHIC',
+      registeredAt: u.createdAt,
+      status: u.profile?.status || 'disabled',
+      // Geographic path
+      geographicPath: u.district
+        ? [u.region?.name, u.locality?.name, u.adminUnit?.name, u.district?.name].filter(Boolean).join(' > ')
+        : null,
+      // Expatriate path
+      expatriatePath: u.expatriateDistrict
+        ? [u.expatriateRegion?.name, u.expatriateLocality?.name, u.expatriateAdminUnit?.name, u.expatriateDistrict?.name].filter(Boolean).join(' > ')
+        : null,
+    }));
+
+    res.json({
+      registrations,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error: any) {
+    console.error('Get pending registrations error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Approve a pending registration (activate user).
+ */
+export const approveRegistration = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { profile: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (user.profile?.status === 'active') {
+      res.status(409).json({ error: 'تم تفعيل هذا العضو مسبقاً' });
+      return;
+    }
+
+    // Optimistic locking: only activate if still 'disabled' (prevents double-approve race)
+    const result = await prisma.profile.updateMany({
+      where: { userId: id, status: 'disabled' },
+      data: { status: 'active' },
+    });
+
+    if (result.count === 0) {
+      res.status(409).json({ error: 'تمت معالجة هذا الطلب من قبل مسؤول آخر' });
+      return;
+    }
+
+    // Notify the user via WebSocket + DB
+    await notify.registrationApproved(id);
+
+    res.json({ message: 'تم تفعيل العضو بنجاح', userId: id });
+  } catch (error: any) {
+    console.error('Approve registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Reject a pending registration (delete user).
+ */
+export const rejectRegistration = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { profile: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Guard: if user is already active, they were approved by another admin
+    if (user.profile?.status === 'active') {
+      res.status(409).json({ error: 'تم تفعيل هذا العضو من قبل مسؤول آخر، لا يمكن رفضه' });
+      return;
+    }
+
+    // Notify the user BEFORE deletion (WebSocket real-time only — DB record won't persist)
+    await notify.registrationRejected(id, reason);
+
+    // Delete the user and all related records (cascades via Prisma relations)
+    // First delete profile and memberDetails, then user
+    if (user.profile) {
+      await prisma.profile.delete({ where: { userId: id } });
+    }
+    const memberDetails = await prisma.memberDetails.findUnique({ where: { userId: id } });
+    if (memberDetails) {
+      await prisma.memberDetails.delete({ where: { userId: id } });
+    }
+    // Clean up any notifications created for this user before deleting
+    await prisma.notification.deleteMany({ where: { userId: id } });
+    await prisma.user.delete({ where: { id } });
+
+    res.json({ message: 'تم رفض طلب التسجيل', userId: id, reason });
+  } catch (error: any) {
+    console.error('Reject registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 // Get all memberships for admin panel with hierarchical access control
 export const getMemberships = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
@@ -408,6 +735,17 @@ export const resetPassword = async (req: AuthenticatedRequest, res: Response, _n
     const user = await userService.getUserById(id);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // ── SECURITY: Prevent lower-level admin from resetting higher-level passwords ──
+    const creatorLevel = req.user?.adminLevel || 'USER';
+    const targetLevel = user.adminLevel || 'USER';
+    if (!canAssignLevel(creatorLevel, targetLevel)) {
+      res.status(403).json({
+        error: 'لا يمكنك إعادة تعيين كلمة مرور مستخدم بصلاحيات أعلى من صلاحياتك.',
+        code: 'HIERARCHY_ACCESS_DENIED',
+      });
       return;
     }
     
@@ -565,6 +903,18 @@ export const createUserWithHierarchy = async (req: AuthenticatedRequest, res: Re
     if (!firstName || !lastName) {
       console.log('Validation failed: First name or last name missing', { firstName, lastName });
       res.status(400).json({ error: 'First name and last name are required' });
+      return;
+    }
+
+    // ── SECURITY: Prevent privilege escalation ──────────────────────
+    // A DISTRICT admin must NOT be able to create a REGION-level admin.
+    const creatorLevel = req.user?.adminLevel || 'USER';
+    const requestedLevel = adminLevel || 'USER';
+    if (!canAssignLevel(creatorLevel, requestedLevel)) {
+      res.status(403).json({
+        error: 'لا يمكنك إنشاء مستخدم بمستوى صلاحيات أعلى من صلاحياتك.',
+        code: 'PRIVILEGE_ESCALATION_DENIED',
+      });
       return;
     }
 
@@ -848,6 +1198,12 @@ export const updateUserHierarchy = async (req: AuthenticatedRequest, res: Respon
       }
     });
 
+    // Notify the user that their hierarchy assignment was changed by an admin
+    await notify.system(id, 'تم تحديث موقعك الهرمي',
+      `تم تغيير تعيينك في التسلسل الهرمي إلى مستوى "${hierarchyLevel || 'none'}".`,
+      { action: 'HIERARCHY_ASSIGNMENT_CHANGED', level: hierarchyLevel },
+    );
+
     res.json(updatedUser);
   } catch (error: any) {
     console.error('Update user hierarchy error:', error);
@@ -981,7 +1337,14 @@ export const getUserHierarchyPath = async (req: AuthenticatedRequest, res: Respo
 };
 
 /**
- * Update user's active hierarchy preference
+ * Switch the user's active hierarchy.
+ *
+ * This is the core "Profile Switcher" endpoint. It:
+ *   1. Validates the target hierarchy exists for the user
+ *   2. Checks the per-hierarchy suspension status
+ *   3. Persists the new activeHierarchy in the DB
+ *   4. Reissues a fresh JWT whose claims reflect the new hierarchy
+ *   5. Returns the new token + user so the client can hot-swap seamlessly
  */
 export const updateActiveHierarchy = async (req: AuthenticatedRequest, res: Response, _next?: NextFunction): Promise<void> => {
   try {
@@ -991,32 +1354,161 @@ export const updateActiveHierarchy = async (req: AuthenticatedRequest, res: Resp
       return;
     }
     const { activeHierarchy } = req.body;
-    
-    // Validate activeHierarchy value
+
+    // --- 1. Validate value ---
     const validHierarchies = ['ORIGINAL', 'EXPATRIATE', 'SECTOR'];
     if (!validHierarchies.includes(activeHierarchy)) {
-      res.status(400).json({ 
-        error: 'Invalid hierarchy type. Must be ORIGINAL, EXPATRIATE, or SECTOR' 
+      res.status(400).json({
+        error: 'Invalid hierarchy type. Must be ORIGINAL, EXPATRIATE, or SECTOR'
       });
       return;
     }
-    
-    // Update user's active hierarchy
+
+    // --- 2. Fetch full user with all hierarchy relations ---
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: true,
+        memberDetails: true,
+        nationalLevel: true,
+        region: true,
+        locality: true,
+        adminUnit: true,
+        district: true,
+        expatriateRegion: true,
+        sectorNationalLevel: true,
+        sectorRegion: true,
+        sectorLocality: true,
+        sectorAdminUnit: true,
+        sectorDistrict: true,
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // --- 3. Check membership in the target hierarchy ---
+    const hasMembership = (() => {
+      switch (activeHierarchy) {
+        case 'ORIGINAL':
+          return !!(user.districtId || user.adminUnitId || user.localityId || user.regionId || user.nationalLevelId);
+        case 'EXPATRIATE':
+          return !!user.expatriateRegionId;
+        case 'SECTOR':
+          return !!(user.sectorDistrictId || user.sectorAdminUnitId || user.sectorLocalityId || user.sectorRegionId || user.sectorNationalLevelId);
+        default:
+          return false;
+      }
+    })();
+
+    if (!hasMembership) {
+      res.status(400).json({
+        error: 'أنت غير مسجل في هذا التسلسل الهرمي',
+        code: 'NO_MEMBERSHIP'
+      });
+      return;
+    }
+
+    // --- 4. Edge-case: per-hierarchy suspension check ---
+    // The profile.status tracks the user's status in the *current* hierarchy.
+    // hierarchyStatuses (JSON) stores per-hierarchy overrides set by admin.
+    // If the target hierarchy is explicitly suspended, block the switch.
+    const hierarchyStatuses: Record<string, string> = (user as any).hierarchyStatuses || {};
+    const targetStatus = hierarchyStatuses[activeHierarchy];
+
+    if (targetStatus === 'suspended' || targetStatus === 'disabled') {
+      res.status(403).json({
+        error: 'حسابك موقوف في هذا التسلسل الهرمي. تواصل مع المسؤول.',
+        code: 'HIERARCHY_SUSPENDED',
+        hierarchy: activeHierarchy,
+        status: targetStatus
+      });
+      return;
+    }
+
+    // --- 5. Persist the switch ---
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: { activeHierarchy },
-      select: {
-        id: true,
-        email: true,
-        mobileNumber: true,
-        activeHierarchy: true,
-        profile: true
+      include: {
+        profile: true,
+        nationalLevel: true,
+        region: true,
+        locality: true,
+        adminUnit: true,
+        district: true,
+        expatriateRegion: true,
+        sectorNationalLevel: true,
+        sectorRegion: true,
+        sectorLocality: true,
+        sectorAdminUnit: true,
+        sectorDistrict: true,
       }
     });
-    
+
+    // --- 6. Re-issue JWT with updated hierarchy claims ---
+    const newToken = generateAccessToken({
+      id: updatedUser.id,
+      email: updatedUser.email ?? undefined,
+      mobileNumber: updatedUser.mobileNumber ?? undefined,
+      role: updatedUser.role,
+      adminLevel: updatedUser.adminLevel,
+      activeHierarchy: updatedUser.activeHierarchy,
+      // Original hierarchy
+      nationalLevelId: updatedUser.nationalLevelId,
+      regionId: updatedUser.regionId,
+      localityId: updatedUser.localityId,
+      adminUnitId: updatedUser.adminUnitId,
+      districtId: updatedUser.districtId,
+      // Sector hierarchy
+      sectorNationalLevelId: updatedUser.sectorNationalLevelId,
+      sectorRegionId: updatedUser.sectorRegionId,
+      sectorLocalityId: updatedUser.sectorLocalityId,
+      sectorAdminUnitId: updatedUser.sectorAdminUnitId,
+      sectorDistrictId: updatedUser.sectorDistrictId,
+      // Expatriate hierarchy
+      expatriateRegionId: updatedUser.expatriateRegionId,
+    });
+
     res.json({
-      message: 'Active hierarchy updated successfully',
-      user: updatedUser
+      message: 'تم تبديل التسلسل الهرمي بنجاح',
+      accessToken: newToken,
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        mobileNumber: updatedUser.mobileNumber,
+        role: updatedUser.role,
+        adminLevel: updatedUser.adminLevel,
+        activeHierarchy: updatedUser.activeHierarchy,
+        profile: updatedUser.profile,
+        // Original
+        nationalLevelId: updatedUser.nationalLevelId,
+        regionId: updatedUser.regionId,
+        localityId: updatedUser.localityId,
+        adminUnitId: updatedUser.adminUnitId,
+        districtId: updatedUser.districtId,
+        nationalLevel: updatedUser.nationalLevel,
+        region: updatedUser.region,
+        locality: updatedUser.locality,
+        adminUnit: updatedUser.adminUnit,
+        district: updatedUser.district,
+        // Expatriate
+        expatriateRegionId: updatedUser.expatriateRegionId,
+        expatriateRegion: updatedUser.expatriateRegion,
+        // Sector
+        sectorNationalLevelId: updatedUser.sectorNationalLevelId,
+        sectorRegionId: updatedUser.sectorRegionId,
+        sectorLocalityId: updatedUser.sectorLocalityId,
+        sectorAdminUnitId: updatedUser.sectorAdminUnitId,
+        sectorDistrictId: updatedUser.sectorDistrictId,
+        sectorNationalLevel: updatedUser.sectorNationalLevel,
+        sectorRegion: updatedUser.sectorRegion,
+        sectorLocality: updatedUser.sectorLocality,
+        sectorAdminUnit: updatedUser.sectorAdminUnit,
+        sectorDistrict: updatedUser.sectorDistrict,
+      }
     });
   } catch (error: any) {
     console.error('Update active hierarchy error:', error);

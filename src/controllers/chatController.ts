@@ -53,11 +53,14 @@ const voiceUpload = multer({
 
 /**
  * Admin: Create a new chat room
+ * Enforces hierarchy checks: the creating admin can only add participants
+ * that fall within their manageable scope.
  */
 export const createChatRoom = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { title, participantUserIds } = req.body;
     const createdById = req.user!.id;
+    const adminUser = req.user!;
 
     if (!title || !participantUserIds || !Array.isArray(participantUserIds)) {
       res.status(400).json({ error: 'Title and participant user IDs are required' });
@@ -68,12 +71,49 @@ export const createChatRoom = async (req: AuthenticatedRequest, res: Response): 
     const users = await prisma.user.findMany({
       where: {
         id: { in: participantUserIds }
+      },
+      select: {
+        id: true,
+        activeHierarchy: true,
+        adminLevel: true,
+        regionId: true,
+        localityId: true,
+        adminUnitId: true,
+        districtId: true,
+        expatriateRegionId: true,
       }
     });
 
     if (users.length !== participantUserIds.length) {
       res.status(400).json({ error: 'Some user IDs are invalid' });
       return;
+    }
+
+    // Hierarchy check: Non-root admins can only add users from their hierarchy scope
+    const adminLevel = adminUser.adminLevel;
+    if (adminLevel !== 'ADMIN' && adminLevel !== 'GENERAL_SECRETARIAT') {
+      const adminHierarchy = adminUser.activeHierarchy || 'ORIGINAL';
+      for (const participant of users) {
+        // Cross-hierarchy check: participant must share the admin's active hierarchy
+        if (participant.activeHierarchy && participant.activeHierarchy !== adminHierarchy) {
+          res.status(403).json({
+            error: `لا يمكنك إضافة مستخدمين من تسلسل هرمي مختلف`,
+          });
+          return;
+        }
+
+        // Vertical check: for geographic hierarchy, verify scope
+        if (adminHierarchy === 'ORIGINAL') {
+          if (adminLevel === 'REGION' && adminUser.regionId && participant.regionId !== adminUser.regionId) {
+            res.status(403).json({ error: 'لا يمكنك إضافة مستخدمين من خارج نطاق منطقتك' });
+            return;
+          }
+          if (adminLevel === 'LOCALITY' && adminUser.localityId && participant.localityId !== adminUser.localityId) {
+            res.status(403).json({ error: 'لا يمكنك إضافة مستخدمين من خارج نطاق محليتك' });
+            return;
+          }
+        }
+      }
     }
 
     // Create chat room with memberships
@@ -122,10 +162,15 @@ export const createChatRoom = async (req: AuthenticatedRequest, res: Response): 
 
 /**
  * Admin: Get all chat rooms
+ * Root admins see all rooms; scoped admins only see rooms they created.
  */
-export const getAllChatRooms = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const getAllChatRooms = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    const adminUser = req.user!;
+    const isRootAdmin = adminUser.adminLevel === 'ADMIN' || adminUser.adminLevel === 'GENERAL_SECRETARIAT';
+
     const chatRooms = await prisma.chatRoom.findMany({
+      where: isRootAdmin ? {} : { createdById: adminUser.id },
       include: {
         createdBy: {
           select: {
@@ -268,6 +313,8 @@ export const addParticipant = async (req: AuthenticatedRequest, res: Response): 
 
 /**
  * Admin: Remove participant from chat room
+ * Emits a 'room_removed' WebSocket event so the mobile client can
+ * navigate away from the conversation in real-time.
  */
 export const removeParticipant = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -281,6 +328,12 @@ export const removeParticipant = async (req: AuthenticatedRequest, res: Response
         }
       }
     });
+
+    // Notify the removed user in real-time
+    const io = (req as any).app?.get('io');
+    if (io) {
+      io.to(`user:${userId}`).emit('room_removed', { roomId, reason: 'تمت إزالتك من غرفة المحادثة' });
+    }
 
     res.json({ message: 'Participant removed successfully' });
   } catch (error: any) {

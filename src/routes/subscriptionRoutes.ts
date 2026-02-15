@@ -40,6 +40,7 @@ router.post('/', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY'
 router.put('/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), subscriptionController.updateSubscription);
 router.patch('/:id/renew', authorize(['ADMIN', 'GENERAL_SECRETARIAT', 'REGION', 'LOCALITY', 'ADMIN_UNIT', 'DISTRICT']), subscriptionController.renewSubscription);
 router.post('/:id/receipt', upload.single('receipt'), subscriptionController.uploadReceipt);
+router.post('/:id/receipt-link', subscriptionController.linkReceipt);
 router.delete('/:id', authorize(['ADMIN', 'GENERAL_SECRETARIAT']), subscriptionController.deleteSubscription);
 
 export default router;

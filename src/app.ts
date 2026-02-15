@@ -22,6 +22,7 @@ import publicRoutes from './routes/publicRoutes';
 import chatRoutes from './routes/chatRoutes';
 import deletionRequestRoutes from './routes/deletionRequestRoutes';
 import notificationRoutes from './routes/notificationRoutes';
+import uploadRoutes from './routes/uploadRoutes';
 
 // Import error handler
 import errorHandler from './middlewares/errorHandler';
@@ -29,6 +30,9 @@ import errorHandler from './middlewares/errorHandler';
 // Import utilities
 import { verifyAccessToken } from './utils/auth';
 import prisma from './utils/prisma';
+
+// Import notification service (WebSocket + push delivery)
+import { setSocketIO } from './services/notificationService';
 
 // Create Express app and HTTP server
 const app: Express = express();
@@ -188,6 +192,7 @@ app.use('/api/public', publicRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/deletion-requests', deletionRequestRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/uploads', uploadRoutes);
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
@@ -268,9 +273,15 @@ io.use((socket: any, next: (err?: Error) => void) => {
   next();
 });
 
+// Give the notification service access to Socket.IO for real-time delivery
+setSocketIO(io);
+
 // Socket.IO connection handler
 io.on('connection', (socket: any) => {
   console.log(`User connected: ${socket.userId}`);
+
+  // Auto-join user-specific room for targeted notifications
+  socket.join(`user:${socket.userId}`);
 
   // Join chat rooms
   socket.on('join_room', async (roomId: string) => {

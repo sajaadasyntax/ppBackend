@@ -2,6 +2,8 @@ import prisma from '../utils/prisma';
 import * as bcrypt from 'bcrypt';
 import { UserPayload } from '../types';
 import { Prisma } from '@prisma/client';
+import { notify } from './notificationService';
+import { markUserSuspended, markUserActive } from '../middlewares/auth';
 
 /**
  * Hierarchical User Management Service
@@ -43,66 +45,107 @@ class HierarchicalUserService {
   /**
    * Get users that an admin can manage based on their hierarchical level
    */
-  static async getManageableUsers(adminUser: AdminUser): Promise<any[]> {
-    const { adminLevel, nationalLevelId, regionId, localityId, adminUnitId, districtId } = adminUser;
-    
-    let whereClause: Prisma.UserWhereInput = {};
-    
-    switch (adminLevel) {
-      case 'GENERAL_SECRETARIAT':
-      case 'ADMIN':
-        // General Secretariat and Admin can see all users
-        whereClause = {};
-        break;
-        
-      case 'NATIONAL_LEVEL':
-        // National level admin can see users in their national level and all sub-levels
-        whereClause = {
-          nationalLevelId: nationalLevelId || undefined
-        };
-        break;
-        
-      case 'REGION':
-        // Region admin can see users in their region and all sub-levels
-        whereClause = {
-          regionId: regionId || undefined
-        };
-        break;
-        
-      case 'LOCALITY':
-        // Locality admin can see users in their locality and all sub-levels
-        whereClause = {
-          regionId: regionId || undefined,
-          localityId: localityId || undefined
-        };
-        break;
-        
-      case 'ADMIN_UNIT':
-        // Admin unit admin can see users in their admin unit and all sub-levels
-        whereClause = {
-          regionId: regionId || undefined,
-          localityId: localityId || undefined,
-          adminUnitId: adminUnitId || undefined
-        };
-        break;
-        
-      case 'DISTRICT':
-        // District admin can only see users in their district
-        whereClause = {
-          regionId: regionId || undefined,
-          localityId: localityId || undefined,
-          adminUnitId: adminUnitId || undefined,
-          districtId: districtId || undefined
-        };
-        break;
-        
-      default:
-        // Regular users can only see themselves
-        whereClause = {
-          id: adminUser.id
-        };
+  /**
+   * Build a WHERE clause that finds all users within the admin's jurisdiction,
+   * traversing down through child nodes.
+   *
+   * SECURITY FIX: Also respects `activeHierarchy` to prevent cross-hierarchy
+   * leakage (geographical admin cannot see expatriate users).
+   */
+  private static async buildScopedWhere(adminUser: AdminUser): Promise<Prisma.UserWhereInput> {
+    const { adminLevel, regionId, localityId, adminUnitId, districtId } = adminUser;
+
+    // Top-level admins see everything
+    if (adminLevel === 'GENERAL_SECRETARIAT' || adminLevel === 'ADMIN') {
+      return {};
     }
-    
+
+    // ── Expatriate admins — scope to expatriate hierarchy ───────────
+    if (adminLevel?.startsWith('EXPATRIATE')) {
+      const expatriateRegionId = (adminUser as any).expatriateRegionId;
+      if (expatriateRegionId) {
+        return { activeHierarchy: 'EXPATRIATE', expatriateRegionId };
+      }
+      return { id: adminUser.id }; // Fallback: can only see self
+    }
+
+    // ── Geographical admins — scope to ORIGINAL hierarchy ───────────
+    // and traverse child nodes so REGION admin counts users at ALL sub-levels.
+    const baseFilter: Prisma.UserWhereInput = { activeHierarchy: 'ORIGINAL' };
+
+    switch (adminLevel) {
+      case 'NATIONAL_LEVEL':
+        return { ...baseFilter, nationalLevelId: adminUser.nationalLevelId || undefined };
+
+      case 'REGION': {
+        if (!regionId) return { id: adminUser.id };
+        // Traverse: region → localities → adminUnits → districts
+        const localities = await prisma.locality.findMany({ where: { regionId }, select: { id: true } });
+        const localityIds = localities.map(l => l.id);
+        const adminUnits = localityIds.length
+          ? await prisma.adminUnit.findMany({ where: { localityId: { in: localityIds } }, select: { id: true } })
+          : [];
+        const auIds = adminUnits.map(au => au.id);
+        const districts = auIds.length
+          ? await prisma.district.findMany({ where: { adminUnitId: { in: auIds } }, select: { id: true } })
+          : [];
+        const dIds = districts.map(d => d.id);
+
+        return {
+          ...baseFilter,
+          OR: [
+            { regionId },
+            ...(localityIds.length ? [{ localityId: { in: localityIds } }] : []),
+            ...(auIds.length       ? [{ adminUnitId: { in: auIds } }]       : []),
+            ...(dIds.length        ? [{ districtId: { in: dIds } }]         : []),
+          ],
+        };
+      }
+
+      case 'LOCALITY': {
+        if (!localityId) return { id: adminUser.id };
+        const adminUnits = await prisma.adminUnit.findMany({ where: { localityId }, select: { id: true } });
+        const auIds = adminUnits.map(au => au.id);
+        const districts = auIds.length
+          ? await prisma.district.findMany({ where: { adminUnitId: { in: auIds } }, select: { id: true } })
+          : [];
+        const dIds = districts.map(d => d.id);
+
+        return {
+          ...baseFilter,
+          OR: [
+            { localityId },
+            ...(auIds.length ? [{ adminUnitId: { in: auIds } }] : []),
+            ...(dIds.length  ? [{ districtId: { in: dIds } }]   : []),
+          ],
+        };
+      }
+
+      case 'ADMIN_UNIT': {
+        if (!adminUnitId) return { id: adminUser.id };
+        const districts = await prisma.district.findMany({ where: { adminUnitId }, select: { id: true } });
+        const dIds = districts.map(d => d.id);
+
+        return {
+          ...baseFilter,
+          OR: [
+            { adminUnitId },
+            ...(dIds.length ? [{ districtId: { in: dIds } }] : []),
+          ],
+        };
+      }
+
+      case 'DISTRICT':
+        return { ...baseFilter, districtId: districtId || undefined };
+
+      default:
+        return { id: adminUser.id };
+    }
+  }
+
+  static async getManageableUsers(adminUser: AdminUser): Promise<any[]> {
+    const whereClause = await HierarchicalUserService.buildScopedWhere(adminUser);
+
     return prisma.user.findMany({
       where: whereClause,
       include: {
@@ -820,12 +863,14 @@ class HierarchicalUserService {
    * Update user status
    */
   static async updateUserStatus(userId: string, active: boolean): Promise<any> {
-    return prisma.user.update({
+    const newStatus = active ? 'active' : 'disabled';
+
+    const result = await prisma.user.update({
       where: { id: userId },
       data: { 
         profile: {
           update: {
-            status: active ? "active" : "disabled" 
+            status: newStatus,
           }
         }
       },
@@ -839,6 +884,23 @@ class HierarchicalUserService {
         district: true
       }
     });
+
+    // Notify the user about status change
+    await notify.statusChanged(userId, newStatus);
+
+    if (!active) {
+      // CRITICAL: Immediately invalidate the user's session
+      // 1. Invalidate the auth middleware cache so the next request is blocked
+      markUserSuspended(userId);
+      // 2. Delete all refresh tokens so the user can't get new access tokens
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+      // 3. Send force-logout via WebSocket so the mobile app logs out immediately
+      await notify.forceLogout(userId);
+    } else {
+      markUserActive(userId);
+    }
+
+    return result;
   }
 }
 

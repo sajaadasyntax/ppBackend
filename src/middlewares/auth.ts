@@ -1,8 +1,28 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/auth';
 import { AuthenticatedRequest } from '../types';
+import prisma from '../utils/prisma';
 
-export const authenticate = (req: Request, res: Response, next: NextFunction): void => {
+/**
+ * In-memory cache for suspended user IDs.
+ * Prevents a DB query on EVERY request while still catching suspensions
+ * within a short window (~60 s).  The cache is also invalidated
+ * imperatively via `markUserSuspended()`.
+ */
+const suspendedUserCache = new Map<string, { suspended: boolean; cachedAt: number }>();
+const STATUS_CACHE_TTL_MS = 60_000; // 60 seconds
+
+/** Called from userController / hierarchicalUserService when a user is suspended */
+export function markUserSuspended(userId: string): void {
+  suspendedUserCache.set(userId, { suspended: true, cachedAt: Date.now() });
+}
+
+/** Called when a user is re-activated */
+export function markUserActive(userId: string): void {
+  suspendedUserCache.delete(userId);
+}
+
+export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   // Get the token from headers
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -13,11 +33,45 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
   // Extract token
   const token = authHeader.split(' ')[1];
   
-  // Verify token
+  // Verify token signature
   const decoded = verifyAccessToken(token);
   if (!decoded) {
     res.status(401).json({ error: 'Unauthorized - Invalid token' });
     return;
+  }
+
+  // ── Check user status (suspended / disabled) ──────────────────────
+  // Uses a short-lived cache to avoid hitting the DB on every single request.
+  const userId = decoded.id;
+  const cached = suspendedUserCache.get(userId);
+  const cacheValid = cached && (Date.now() - cached.cachedAt) < STATUS_CACHE_TTL_MS;
+
+  if (cacheValid && cached.suspended) {
+    res.status(403).json({ error: 'تم تعليق حسابك. تواصل مع المسؤول.', code: 'ACCOUNT_SUSPENDED' });
+    return;
+  }
+
+  if (!cacheValid) {
+    // Cache miss or expired — check the database
+    try {
+      const profile = await prisma.profile.findUnique({
+        where: { userId },
+        select: { status: true },
+      });
+
+      const isSuspended = profile?.status === 'disabled' || profile?.status === 'suspended';
+      suspendedUserCache.set(userId, { suspended: isSuspended, cachedAt: Date.now() });
+
+      if (isSuspended) {
+        res.status(403).json({ error: 'تم تعليق حسابك. تواصل مع المسؤول.', code: 'ACCOUNT_SUSPENDED' });
+        return;
+      }
+    } catch (err) {
+      // If DB is unreachable, let the request through (fail-open) and
+      // rely on the JWT signature alone.  This prevents a DB outage from
+      // locking out every user.
+      console.error('Status check failed, proceeding with JWT only:', err);
+    }
   }
   
   // Set user on request object
