@@ -182,9 +182,10 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response, _
       }
       
       try {
+        let user: Awaited<ReturnType<typeof HierarchyService.getUserWithHierarchy>> = null;
         // Automatically set hierarchy based on logged-in admin's level
         if (req.user) {
-          const user = await HierarchyService.getUserWithHierarchy(req.user.id);
+          user = await HierarchyService.getUserWithHierarchy(req.user.id);
           if (user) {
             const autoHierarchy = HierarchyService.determineContentHierarchy(user);
             // Merge auto hierarchy with provided data (provided data takes precedence if explicitly set)
@@ -254,6 +255,15 @@ export const createBulletin = async (req: AuthenticatedRequest, res: Response, _
         if (bulletinData.targetAdminUnitId && !bulletinData.targetLocalityId) {
           res.status(400).json({ error: 'Cannot target an admin unit without specifying its locality' });
           return;
+        }
+
+        if (user) {
+          try {
+            HierarchyService.validateAdminContentScope(user, bulletinData);
+          } catch (scopeErr: any) {
+            res.status(403).json({ error: scopeErr.message || 'You do not have permission to target this scope.' });
+            return;
+          }
         }
         
         const bulletin = await contentService.createBulletin(bulletinData);
@@ -728,10 +738,11 @@ export const createVotingItem = async (req: AuthenticatedRequest, res: Response,
       return;
     }
     const votingData = req.body;
-    
+    let user: Awaited<ReturnType<typeof HierarchyService.getUserWithHierarchy>> = null;
+
     // Automatically set hierarchy based on logged-in admin's level
     if (req.user) {
-      const user = await HierarchyService.getUserWithHierarchy(userId);
+      user = await HierarchyService.getUserWithHierarchy(userId);
       if (user) {
         const autoHierarchy = HierarchyService.determineContentHierarchy(user);
         // Only auto-set if not explicitly provided
@@ -757,7 +768,7 @@ export const createVotingItem = async (req: AuthenticatedRequest, res: Response,
         }
       }
     }
-    
+
     // Validate that hierarchy targeting is provided (fallback)
     // Accept any of: Original (region), Expatriate (expatriate region), Sector (national level, region, locality, adminUnit, district), or Global (no targeting)
     const hasOriginalHierarchy = votingData.targetRegionId || votingData.targetNationalLevelId;
@@ -766,12 +777,21 @@ export const createVotingItem = async (req: AuthenticatedRequest, res: Response,
                                votingData.targetSectorLocalityId || votingData.targetSectorAdminUnitId || 
                                votingData.targetSectorDistrictId;
     const isGlobal = votingData.isGlobal === true;
-    
+
     if (!hasOriginalHierarchy && !hasExpatriateHierarchy && !hasSectorHierarchy && !isGlobal) {
       res.status(400).json({ error: 'Hierarchy targeting is required for creating voting items' });
       return;
     }
-    
+
+    if (user) {
+      try {
+        HierarchyService.validateAdminContentScope(user, votingData);
+      } catch (scopeErr: any) {
+        res.status(403).json({ error: scopeErr.message || 'You do not have permission to target this scope.' });
+        return;
+      }
+    }
+
     const votingItem = await contentService.createVotingItem(userId, votingData);
     res.status(201).json(votingItem);
   } catch (error: any) {
@@ -796,10 +816,11 @@ export const createSurvey = async (req: AuthenticatedRequest, res: Response, _ne
       return;
     }
     const surveyData = req.body;
-    
+    let user: Awaited<ReturnType<typeof HierarchyService.getUserWithHierarchy>> = null;
+
     // Automatically set hierarchy based on logged-in admin's level
     if (req.user) {
-      const user = await HierarchyService.getUserWithHierarchy(userId);
+      user = await HierarchyService.getUserWithHierarchy(userId);
       if (user) {
         const autoHierarchy = HierarchyService.determineContentHierarchy(user);
         // Only auto-set if not explicitly provided
@@ -825,7 +846,7 @@ export const createSurvey = async (req: AuthenticatedRequest, res: Response, _ne
         }
       }
     }
-    
+
     // Validate that hierarchy targeting is provided (fallback)
     // Accept any of: Original (region), Expatriate (expatriate region), Sector (national level, region, locality, adminUnit, district), or Global (no targeting)
     const hasOriginalSurveyHierarchy = surveyData.targetRegionId || surveyData.targetNationalLevelId;
@@ -834,12 +855,21 @@ export const createSurvey = async (req: AuthenticatedRequest, res: Response, _ne
                                       surveyData.targetSectorLocalityId || surveyData.targetSectorAdminUnitId || 
                                       surveyData.targetSectorDistrictId;
     const isSurveyGlobal = surveyData.isGlobal === true;
-    
+
     if (!hasOriginalSurveyHierarchy && !hasExpatriateSurveyHierarchy && !hasSectorSurveyHierarchy && !isSurveyGlobal) {
       res.status(400).json({ error: 'Hierarchy targeting is required for creating surveys' });
       return;
     }
-    
+
+    if (user) {
+      try {
+        HierarchyService.validateAdminContentScope(user, surveyData);
+      } catch (scopeErr: any) {
+        res.status(403).json({ error: scopeErr.message || 'You do not have permission to target this scope.' });
+        return;
+      }
+    }
+
     const survey = await contentService.createSurvey(userId, surveyData);
     res.status(201).json(survey);
   } catch (error: any) {

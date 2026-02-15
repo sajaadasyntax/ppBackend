@@ -555,6 +555,75 @@ class HierarchyService {
   }
 
   /**
+   * Determine hierarchy type from content target payload (ORIGINAL, EXPATRIATE, SECTOR, or GLOBAL).
+   */
+  private static getHierarchyKindFromPayload(payload: any): 'ORIGINAL' | 'EXPATRIATE' | 'SECTOR' | 'GLOBAL' {
+    const hasOriginal = !!(payload.targetNationalLevelId || payload.targetRegionId || payload.targetLocalityId || payload.targetAdminUnitId || payload.targetDistrictId);
+    const hasExpatriate = !!payload.targetExpatriateRegionId;
+    const hasSector = !!(payload.targetSectorNationalLevelId || payload.targetSectorRegionId || payload.targetSectorLocalityId || payload.targetSectorAdminUnitId || payload.targetSectorDistrictId);
+    const count = [hasOriginal, hasExpatriate, hasSector].filter(Boolean).length;
+    if (count > 1) return 'ORIGINAL'; // caller should have validated exclusive targets already
+    if (hasExpatriate) return 'EXPATRIATE';
+    if (hasSector) return 'SECTOR';
+    if (hasOriginal) return 'ORIGINAL';
+    return 'GLOBAL';
+  }
+
+  /**
+   * Validate that the admin can create content with the given target payload (scope check).
+   * Root admins (ADMIN, GENERAL_SECRETARIAT, NATIONAL_LEVEL) bypass. Others must target only within their scope.
+   * @throws Error with message if scope is violated
+   */
+  static validateAdminContentScope(user: any, targetPayload: any): void {
+    const rootLevels = ['ADMIN', 'GENERAL_SECRETARIAT', 'NATIONAL_LEVEL'];
+    if (user?.adminLevel && rootLevels.includes(user.adminLevel)) {
+      return;
+    }
+
+    const kind = HierarchyService.getHierarchyKindFromPayload(targetPayload);
+    if (kind === 'GLOBAL') {
+      throw new Error('Only root admins can create global content.');
+    }
+    if (kind === 'EXPATRIATE') {
+      if (user?.expatriateRegionId && targetPayload.targetExpatriateRegionId !== user.expatriateRegionId) {
+        throw new Error('You can only target content within your assigned expatriate region.');
+      }
+      if (!user?.expatriateRegionId && !rootLevels.includes(user?.adminLevel)) {
+        throw new Error('You do not have permission to create expatriate content.');
+      }
+      return;
+    }
+    if (kind === 'SECTOR') {
+      if (user?.sectorRegionId && targetPayload.targetSectorRegionId && targetPayload.targetSectorRegionId !== user.sectorRegionId) {
+        throw new Error('You can only target content within your assigned sector region.');
+      }
+      if (user?.sectorLocalityId && targetPayload.targetSectorLocalityId && targetPayload.targetSectorLocalityId !== user.sectorLocalityId) {
+        throw new Error('You can only target content within your assigned sector locality.');
+      }
+      if (user?.sectorAdminUnitId && targetPayload.targetSectorAdminUnitId && targetPayload.targetSectorAdminUnitId !== user.sectorAdminUnitId) {
+        throw new Error('You can only target content within your assigned sector admin unit.');
+      }
+      if (user?.sectorDistrictId && targetPayload.targetSectorDistrictId && targetPayload.targetSectorDistrictId !== user.sectorDistrictId) {
+        throw new Error('You can only target content within your assigned sector district.');
+      }
+      return;
+    }
+    // ORIGINAL
+    if (user?.regionId && targetPayload.targetRegionId && targetPayload.targetRegionId !== user.regionId) {
+      throw new Error('You can only target content within your assigned region.');
+    }
+    if (user?.localityId && targetPayload.targetLocalityId && targetPayload.targetLocalityId !== user.localityId) {
+      throw new Error('You can only target content within your assigned locality.');
+    }
+    if (user?.adminUnitId && targetPayload.targetAdminUnitId && targetPayload.targetAdminUnitId !== user.adminUnitId) {
+      throw new Error('You can only target content within your assigned admin unit.');
+    }
+    if (user?.districtId && targetPayload.targetDistrictId && targetPayload.targetDistrictId !== user.districtId) {
+      throw new Error('You can only target content within your assigned district.');
+    }
+  }
+
+  /**
    * Get hierarchy options for content creation based on user's admin level
    * @param user - User object with admin information
    * @returns Available hierarchy options for targeting
