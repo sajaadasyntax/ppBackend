@@ -953,33 +953,68 @@ export const submitReport = async (req: AuthenticatedRequest, res: Response, _ne
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    
-    // Configure multer storage for report attachments
+
+    // Determine which flow is being used:
+    //  A) JSON body with attachmentPaths (presigned-URL flow from mobile)
+    //  B) Multipart form-data with file blobs (legacy / direct upload)
+    const contentType = req.headers['content-type'] || '';
+    const isMultipart = contentType.includes('multipart/form-data');
+
+    if (!isMultipart) {
+      // ── Flow A: JSON body with pre-uploaded attachment paths ──
+      const { title, type, description, date, attachmentName, attachmentPaths } = req.body;
+
+      if (!title || !description) {
+        res.status(400).json({ error: 'Title and description are required' });
+        return;
+      }
+
+      // Build the first attachment name from paths if not provided
+      let resolvedAttachmentName = attachmentName;
+      if (!resolvedAttachmentName && attachmentPaths && attachmentPaths.length > 0) {
+        // Use the URL paths as a comma-separated list so the data is preserved
+        resolvedAttachmentName = Array.isArray(attachmentPaths) ? attachmentPaths.join(',') : attachmentPaths;
+      }
+
+      const reportData: any = {
+        title,
+        type: type || 'general',
+        description,
+        date: date || new Date().toISOString(),
+        attachmentName: resolvedAttachmentName,
+      };
+
+      // Add hierarchy targeting based on user's position
+      const user = await HierarchyService.getUserWithHierarchy(userId);
+      if (user) {
+        const hierarchyTarget = HierarchyService.determineContentHierarchy(user);
+        Object.assign(reportData, hierarchyTarget);
+      }
+
+      const report = await contentService.submitReport(userId, reportData);
+      res.status(201).json(report);
+      return;
+    }
+
+    // ── Flow B: Multipart form-data with file blobs ──
     const storage = multer.diskStorage({
       destination: (_req, _file, cb) => {
-        // Create a unique directory for each report using temporary ID
         const tempId = uuidv4();
         const uploadDir = path.join(__dirname, '../../public/uploads/reports', tempId);
-        
-        // Create directory if it doesn't exist
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
-        
-        // Store the temp ID in request for later use
         (req as any).reportTempId = tempId;
-        
         cb(null, uploadDir);
       },
       filename: (_req, file, cb) => {
-        // Keep original filename for reports
         cb(null, file.originalname);
       }
     });
     
     const upload = multer({ 
       storage, 
-      limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+      limits: { fileSize: 10 * 1024 * 1024 }
     });
     
     upload.array('attachments', 5)(req as any, res, async (err: any) => {
@@ -990,33 +1025,28 @@ export const submitReport = async (req: AuthenticatedRequest, res: Response, _ne
       }
 
       try {
-        // Parse report data from form data
-        const reportData = {
+        const reportData: any = {
           title: (req as any).body.title,
-          type: (req as any).body.type,
+          type: (req as any).body.type || 'general',
           description: (req as any).body.description,
           date: (req as any).body.date || new Date().toISOString(),
           attachmentName: (req as any).files && (req as any).files.length > 0 ? (req as any).files[0].originalname : undefined
         };
         
-        // Add hierarchy targeting based on user's position
         const user = await HierarchyService.getUserWithHierarchy(userId);
         if (user) {
           const hierarchyTarget = HierarchyService.determineContentHierarchy(user);
           Object.assign(reportData, hierarchyTarget);
         }
         
-        // Create the report
         const report = await contentService.submitReport(userId, reportData);
         
-        // If files were uploaded, rename the directory to use the actual report ID
         if ((req as any).files && (req as any).files.length > 0 && (req as any).reportTempId) {
           const oldDir = path.join(__dirname, '../../public/uploads/reports', (req as any).reportTempId);
           const newDir = path.join(__dirname, '../../public/uploads/reports', report.id);
           
           try {
             fs.renameSync(oldDir, newDir);
-            console.log(`Renamed report directory from ${(req as any).reportTempId} to ${report.id}`);
           } catch (renameError: any) {
             console.error('Error renaming report directory:', renameError);
           }
@@ -1026,7 +1056,6 @@ export const submitReport = async (req: AuthenticatedRequest, res: Response, _ne
       } catch (error: any) {
         console.error('Error creating report:', error);
         
-        // Clean up uploaded files if report creation failed
         if ((req as any).reportTempId) {
           const uploadDir = path.join(__dirname, '../../public/uploads/reports', (req as any).reportTempId);
           try {
