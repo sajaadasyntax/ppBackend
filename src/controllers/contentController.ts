@@ -719,10 +719,15 @@ export const submitVote = async (req: AuthenticatedRequest, res: Response, _next
   } catch (error: any) {
     console.error('Error in submitVote controller:', error);
     
-    if (error.message === 'You have already voted in this poll' ||
-        error.message === 'This voting poll is not available' ||
-        error.message === 'Invalid voting option') {
-      res.status(400).json({ error: error.message });
+    const knownErrors = [
+      'You have already voted in this poll',
+      'This voting poll is not available',
+      'This voting poll is not currently active',
+      'Invalid voting option',
+    ];
+    if (knownErrors.includes(error.message)) {
+      const status = error.message.includes('already voted') ? 409 : 400;
+      res.status(status).json({ error: error.message });
       return;
     }
     

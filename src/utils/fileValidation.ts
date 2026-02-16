@@ -107,6 +107,15 @@ export function validateFile(
     return { valid: false, error: `Unknown upload category: ${category}`, code: 'INVALID_FILE_TYPE' };
   }
 
+  // Empty file check
+  if (!fileSize || fileSize <= 0) {
+    return {
+      valid: false,
+      error: 'الملف فارغ (0 بايت). يرجى اختيار ملف صالح.',
+      code: 'EMPTY_FILE' as const,
+    };
+  }
+
   // Size check
   if (fileSize > rule.maxSizeBytes) {
     const maxMB = (rule.maxSizeBytes / (1024 * 1024)).toFixed(0);

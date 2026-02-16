@@ -942,61 +942,60 @@ export const getVotingItems = async (userId: string, adminUser: any = null): Pro
 
 export const submitVote = async (votingId: string, userId: string, optionId: string): Promise<any> => {
   try {
-    // Check if the user has already voted
-    const existingVote = await prisma.vote.findFirst({
-      where: {
-        votingId,
-        userId
-      }
-    });
+    // Use a transaction to prevent race conditions (check-then-create atomically)
+    return await prisma.$transaction(async (tx) => {
+      // Check if the user has already voted (inside transaction for isolation)
+      const existingVote = await tx.vote.findUnique({
+        where: {
+          votingId_userId: { votingId, userId }
+        }
+      });
 
-    if (existingVote) {
+      if (existingVote) {
+        throw new Error('You have already voted in this poll');
+      }
+
+      // Check if the voting item exists and is active
+      const votingItem = await tx.votingItem.findUnique({
+        where: { id: votingId }
+      });
+
+      if (!votingItem || !votingItem.published) {
+        throw new Error('This voting poll is not available');
+      }
+
+      // Check if voting is within the active time period
+      const now = new Date();
+      if (now < votingItem.startDate || now > votingItem.endDate) {
+        throw new Error('This voting poll is not currently active');
+      }
+
+      // Check if the option exists in the voting item
+      const options = JSON.parse(votingItem.options);
+      const optionExists = options.some((option: any, index: number) => {
+        return option.id === optionId || `option-${index}` === optionId;
+      });
+
+      if (!optionExists) {
+        throw new Error('Invalid voting option');
+      }
+
+      // Create the vote (unique constraint @@unique([votingId, userId]) provides final safety)
+      const vote = await tx.vote.create({
+        data: {
+          votingId,
+          userId,
+          optionId
+        }
+      });
+
+      return vote;
+    });
+  } catch (error: any) {
+    // Catch Prisma unique constraint violation (P2002) gracefully
+    if (error.code === 'P2002') {
       throw new Error('You have already voted in this poll');
     }
-
-    // Check if the voting item exists and is active
-    const votingItem = await prisma.votingItem.findUnique({
-      where: { id: votingId }
-    });
-
-    if (!votingItem || !votingItem.published) {
-      throw new Error('This voting poll is not available');
-    }
-
-    // Check if voting is within the active time period
-    const now = new Date();
-    if (now < votingItem.startDate || now > votingItem.endDate) {
-      throw new Error('This voting poll is not currently active');
-    }
-
-    // Check if the option exists in the voting item
-    const options = JSON.parse(votingItem.options);
-    
-    // Handle both formats - either with explicit IDs or with generated IDs like "option-0"
-    const optionExists = options.some((option: any, index: number) => {
-      return option.id === optionId || `option-${index}` === optionId;
-    });
-
-    // Log for debugging
-    console.log('Options:', options);
-    console.log('Option ID to check:', optionId);
-    console.log('Option exists:', optionExists);
-
-    if (!optionExists) {
-      throw new Error('Invalid voting option');
-    }
-
-    // Create the vote
-    const vote = await prisma.vote.create({
-      data: {
-        votingId,
-        userId,
-        optionId
-      }
-    });
-
-    return vote;
-  } catch (error: any) {
     console.error('Error in submitVote service:', error);
     throw error;
   }

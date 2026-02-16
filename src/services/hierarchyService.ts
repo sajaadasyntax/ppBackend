@@ -71,11 +71,73 @@ class HierarchyService {
       });
     }
 
-    // If user has no hierarchy, they see no content (empty filter will return nothing)
-    if (!user.regionId) {
+    // GLOBAL content: all target fields are null (visible to everyone regardless of hierarchy)
+    filter.OR.push({
+      AND: [
+        { targetRegionId: null },
+        { targetLocalityId: null },
+        { targetAdminUnitId: null },
+        { targetDistrictId: null },
+        { targetExpatriateRegionId: null },
+        { targetSectorNationalLevelId: null },
+        { targetSectorRegionId: null },
+        { targetSectorLocalityId: null },
+        { targetSectorAdminUnitId: null },
+        { targetSectorDistrictId: null },
+      ]
+    });
+
+    // Expatriate content for expatriate users
+    if (user.expatriateRegionId) {
       filter.OR.push({
-        id: 'never-matches' // This will never match any real content
+        targetExpatriateRegionId: user.expatriateRegionId
       });
+    }
+
+    // Sector content for sector users
+    if (user.sectorRegionId) {
+      filter.OR.push({
+        targetSectorRegionId: user.sectorRegionId,
+        targetSectorLocalityId: null,
+        targetSectorAdminUnitId: null,
+        targetSectorDistrictId: null,
+      });
+    }
+    if (user.sectorLocalityId) {
+      filter.OR.push({
+        targetSectorLocalityId: user.sectorLocalityId,
+        targetSectorAdminUnitId: null,
+        targetSectorDistrictId: null,
+      });
+    }
+    if (user.sectorAdminUnitId) {
+      filter.OR.push({
+        targetSectorAdminUnitId: user.sectorAdminUnitId,
+        targetSectorDistrictId: null,
+      });
+    }
+    if (user.sectorDistrictId) {
+      filter.OR.push({
+        targetSectorDistrictId: user.sectorDistrictId,
+      });
+    }
+
+    // National level content
+    if (user.nationalLevelId) {
+      filter.OR.push({
+        AND: [
+          { targetNationalLevelId: user.nationalLevelId },
+          { targetRegionId: null },
+          { targetLocalityId: null },
+          { targetAdminUnitId: null },
+          { targetDistrictId: null },
+        ]
+      });
+    }
+
+    // If user has absolutely no hierarchy at all (and the global push above handles their case)
+    if (filter.OR.length === 1 && !user.regionId && !user.expatriateRegionId && !user.sectorRegionId && !user.nationalLevelId) {
+      // They will still see global content from the push above
     }
 
     return filter;
