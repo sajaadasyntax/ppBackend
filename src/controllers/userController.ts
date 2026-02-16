@@ -1892,26 +1892,41 @@ export const getUserHierarchyMemberships = async (req: AuthenticatedRequest, res
       res.status(404).json({ error: 'User not found' });
       return;
     }
+
+    // Determine membership booleans – a user "has" a hierarchy when at least
+    // one level in that hierarchy is assigned.
+    const hasOriginal = !!(user.nationalLevel || user.region || user.locality || user.adminUnit || user.district);
+    const hasExpatriate = !!user.expatriateRegion;
+    const hasSector = !!(user.sectorNationalLevel || user.sectorRegion || user.sectorLocality || user.sectorAdminUnit || user.sectorDistrict);
     
     res.json({
       activeHierarchy: user.activeHierarchy,
-      originalHierarchy: {
-        nationalLevel: user.nationalLevel,
-        region: user.region,
-        locality: user.locality,
-        adminUnit: user.adminUnit,
-        district: user.district
-      },
-      expatriateHierarchy: {
-        region: user.expatriateRegion
-      },
-      sectorHierarchy: {
-        nationalLevel: user.sectorNationalLevel,
-        region: user.sectorRegion,
-        locality: user.sectorLocality,
-        adminUnit: user.sectorAdminUnit,
-        district: user.sectorDistrict
-      }
+
+      // Boolean flags the mobile HierarchySelector relies on
+      hasOriginal,
+      hasExpatriate,
+      hasSector,
+
+      // Name-based hierarchy paths matching the mobile interface
+      originalHierarchy: hasOriginal ? {
+        nationalLevelName: user.nationalLevel?.name,
+        regionName: user.region?.name,
+        localityName: user.locality?.name,
+        adminUnitName: user.adminUnit?.name,
+        districtName: user.district?.name,
+      } : undefined,
+
+      expatriateHierarchy: hasExpatriate ? {
+        expatriateRegionName: user.expatriateRegion?.name,
+      } : undefined,
+
+      sectorHierarchy: hasSector ? {
+        sectorNationalLevelName: user.sectorNationalLevel?.name,
+        sectorRegionName: user.sectorRegion?.name,
+        sectorLocalityName: user.sectorLocality?.name,
+        sectorAdminUnitName: user.sectorAdminUnit?.name,
+        sectorDistrictName: user.sectorDistrict?.name,
+      } : undefined,
     });
   } catch (error: any) {
     console.error('Get user hierarchy memberships error:', error);
