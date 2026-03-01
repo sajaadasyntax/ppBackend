@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient, AdminLevel } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
@@ -14,10 +12,8 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
+// Use standard PrismaClient (no pg adapter) - avoids driver adapter column resolution issues
 const prisma = new PrismaClient({
-  adapter,
   log: ['warn', 'error'],
   errorFormat: 'pretty'
 });
@@ -34,7 +30,7 @@ async function createRootAdmin() {
       mobileNumber: '+249123456789',
       password: adminPassword,
       role: 'ADMIN',
-      adminLevel: 'ADMIN',
+      adminLevel: AdminLevel.ADMIN,
       profile: {
         create: {
           firstName: 'المدير',
