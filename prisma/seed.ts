@@ -1,4 +1,6 @@
 import { PrismaClient, AdminLevel } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
@@ -12,8 +14,10 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Use standard PrismaClient (no pg adapter) - avoids driver adapter column resolution issues
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({
+  adapter,
   log: ['warn', 'error'],
   errorFormat: 'pretty'
 });
@@ -22,10 +26,19 @@ async function createRootAdmin() {
   console.log('🌱 Creating root admin...');
   const adminPassword = await bcrypt.hash('admin123', 10);
 
-  const rootAdmin = await prisma.user.upsert({
+  // Use findFirst + create instead of upsert to avoid adapter column resolution issues
+  let rootAdmin = await prisma.user.findFirst({
     where: { mobileNumber: '+249123456789' },
-    update: {},
-    create: {
+    include: { profile: true }
+  });
+
+  if (rootAdmin) {
+    console.log('✅ Root admin already exists:', rootAdmin.mobileNumber);
+    return rootAdmin;
+  }
+
+  rootAdmin = await prisma.user.create({
+    data: {
       email: 'admin@pp.com',
       mobileNumber: '+249123456789',
       password: adminPassword,
